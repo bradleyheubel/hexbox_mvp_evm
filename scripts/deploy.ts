@@ -10,6 +10,12 @@ async function main() {
   await mockUSDC.waitForDeployment();
   console.log("MockUSDC deployed to:", await mockUSDC.getAddress());
 
+  // Deploy ProductToken
+  const ProductToken = await ethers.getContractFactory("ProductToken");
+  const productToken = await ProductToken.deploy("https://api.example.com/token/");
+  await productToken.waitForDeployment();
+  console.log("ProductToken deployed to:", await productToken.getAddress());
+
   // Deploy USDCFundraiser
   const oneDay = 24 * 60 * 60;
   const deadline = Math.floor(Date.now() / 1000) + oneDay; // 1 day from now
@@ -22,7 +28,8 @@ async function main() {
     deployer.address,               // fee wallet
     minimumTarget,                  // minimum target
     deadline,                       // deadline
-    true                           // enforce conditions
+    true,                           // enforce conditions
+    await productToken.getAddress() // product token address
   );
   await fundraiser.waitForDeployment();
   

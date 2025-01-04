@@ -5,9 +5,11 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./ProductToken.sol";
 
 contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard {
     IERC20 public usdc;
+    ProductToken public productToken;
     address public beneficiaryWallet;
     address public feeWallet;
     uint256 public minimumTarget;
@@ -18,12 +20,16 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard {
     mapping(address => uint256) public deposits;
     uint256 public totalRaised;
     bool public finalized;
+    uint256 private currentTokenId;
+    mapping(uint256 => uint256) public tokenDeposits; // tokenId => deposit amount
+    mapping(uint256 => uint256) public productPrices;
 
     event Deposit(address indexed depositor, uint256 amount, uint256 fee);
     event Refund(address indexed depositor, uint256 amount);
     event FundsReleased(address indexed beneficiary, uint256 amount);
     event FeeUpdated(uint256 newFeePercentage);
     event EmergencyWithdraw(address indexed to, uint256 amount);
+    event ProductPriceSet(uint256 productId, uint256 price);
 
     constructor(
         address _usdcAddress,
@@ -31,11 +37,16 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard {
         address _feeWallet,
         uint256 _minimumTarget,
         uint256 _deadline,
-        bool _enforceConditions
+        bool _enforceConditions,
+        address _productTokenAddress,
+        uint256[] memory _productIds,
+        uint256[] memory _productPrices
     ) Ownable(msg.sender) {
         require(_usdcAddress != address(0), "Invalid USDC address");
         require(_beneficiaryWallet != address(0), "Invalid beneficiary wallet");
         require(_feeWallet != address(0), "Invalid fee wallet");
+        require(_productIds.length == _productPrices.length, "Arrays length mismatch");
+        require(_productIds.length > 0, "No products provided");
         
         usdc = IERC20(_usdcAddress);
         beneficiaryWallet = _beneficiaryWallet;
@@ -44,28 +55,43 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard {
         deadline = _deadline;
         enforceConditions = _enforceConditions;
         feePercentage = 250; // 2.5% default fee
+        productToken = ProductToken(_productTokenAddress);
+
+        // Set initial product prices
+        for(uint256 i = 0; i < _productIds.length; i++) {
+            require(_productPrices[i] > 0, "Invalid product price");
+            productPrices[_productIds[i]] = _productPrices[i];
+            emit ProductPriceSet(_productIds[i], _productPrices[i]);
+        }
     }
 
-    function deposit(uint256 amount) external nonReentrant whenNotPaused {
-        require(amount > 0, "Amount must be greater than 0");
+    function deposit(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
+        require(quantity > 0, "Quantity must be greater than 0");
         require(!finalized, "Fundraiser is finalized");
+        require(productPrices[productId] > 0, "Product not available");
+        
         if (enforceConditions) {
             require(block.timestamp <= deadline, "Deadline has passed");
         }
 
-        uint256 fee = (amount * feePercentage) / 10000;
-        uint256 netAmount = amount - fee;
+        uint256 totalAmount = productPrices[productId] * quantity;
+        uint256 fee = (totalAmount * feePercentage) / 10000;
+        uint256 netAmount = totalAmount - fee;
 
-        require(usdc.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        require(usdc.transferFrom(msg.sender, address(this), totalAmount), "Transfer failed");
         
         if (fee > 0) {
             require(usdc.transfer(feeWallet, fee), "Fee transfer failed");
         }
 
-        deposits[msg.sender] += netAmount;
+        // Mint NFTs to depositor
+        productToken.mint(msg.sender, productId, quantity);
+        
+        // Store deposit amount against token ID
+        tokenDeposits[productId] += netAmount;
         totalRaised += netAmount;
 
-        emit Deposit(msg.sender, amount, fee);
+        emit Deposit(msg.sender, totalAmount, fee);
     }
 
     function finalize() external nonReentrant whenNotPaused {
@@ -120,5 +146,17 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard {
         require(amount <= usdc.balanceOf(address(this)), "Insufficient balance");
         require(usdc.transfer(to, amount), "Transfer failed");
         emit EmergencyWithdraw(to, amount);
+    }
+
+    // Only for testing
+    function updateDeadline(uint256 newDeadline) external onlyOwner {
+        require(!finalized, "Fundraiser is finalized");
+        require(newDeadline > block.timestamp, "Deadline must be in the future");
+        deadline = newDeadline;
+    }
+
+    function setProductPrice(uint256 productId, uint256 price) external onlyOwner {
+        productPrices[productId] = price;
+        emit ProductPriceSet(productId, price);
     }
 } 

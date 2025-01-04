@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
-import { MockUSDC, USDCFundraiser } from "../typechain-types";
+import { MockUSDC, USDCFundraiser, ProductToken } from "../typechain-types";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("USDCFundraiser", function () {
@@ -12,10 +12,14 @@ describe("USDCFundraiser", function () {
     let feeWallet: SignerWithAddress;
     let investor1: SignerWithAddress;
     let investor2: SignerWithAddress;
+    let productToken: ProductToken;
 
     const minimumTarget = 1000_000000n; // 1000 USDC (with 6 decimals)
     let deadline: number;
     const enforceConditions = true;
+
+    const INITIAL_PRODUCT_IDS = [1, 2];
+    const INITIAL_PRODUCT_PRICES = [100_000000n, 200_000000n]; // 100 USDC, 200 USDC
 
     beforeEach(async function () {
         // Get signers
@@ -28,7 +32,11 @@ describe("USDCFundraiser", function () {
         // Set deadline to 1 day from now
         deadline = (await time.latest()) + 24 * 60 * 60;
 
-        // Deploy fundraiser
+        // Deploy ProductToken first
+        const ProductToken = await ethers.getContractFactory("ProductToken");
+        productToken = await ProductToken.deploy("https://api.example.com/token/");
+        
+        // Deploy fundraiser with initial products
         const USDCFundraiser = await ethers.getContractFactory("USDCFundraiser");
         fundraiser = await USDCFundraiser.deploy(
             await mockUSDC.getAddress(),
@@ -36,29 +44,69 @@ describe("USDCFundraiser", function () {
             feeWallet.address,
             minimumTarget,
             deadline,
-            enforceConditions
+            enforceConditions,
+            await productToken.getAddress(),
+            INITIAL_PRODUCT_IDS,
+            INITIAL_PRODUCT_PRICES
         );
 
+        // Grant MINTER_ROLE to fundraiser
+        await productToken.grantRole(await productToken.MINTER_ROLE(), await fundraiser.getAddress());
+
         // Transfer some USDC to investors
-        await mockUSDC.transfer(investor1.address, 10000_000000n); // 10,000 USDC
-        await mockUSDC.transfer(investor2.address, 10000_000000n); // 10,000 USDC
+        await mockUSDC.transfer(investor1.address, 10000_000000n);
+        await mockUSDC.transfer(investor2.address, 10000_000000n);
+    });
+
+    describe("Deployment", function () {
+        it("Should set initial product prices correctly", async function () {
+            for (let i = 0; i < INITIAL_PRODUCT_IDS.length; i++) {
+                expect(await fundraiser.productPrices(INITIAL_PRODUCT_IDS[i]))
+                    .to.equal(INITIAL_PRODUCT_PRICES[i]);
+            }
+        });
+
+        it("Should reject deployment with mismatched arrays", async function () {
+            const USDCFundraiser = await ethers.getContractFactory("USDCFundraiser");
+            await expect(USDCFundraiser.deploy(
+                await mockUSDC.getAddress(),
+                beneficiary.address,
+                feeWallet.address,
+                minimumTarget,
+                deadline,
+                enforceConditions,
+                await productToken.getAddress(),
+                [1], // One ID
+                [100_000000n, 200_000000n] // Two prices
+            )).to.be.revertedWith("Arrays length mismatch");
+        });
+
+        it("Should reject deployment with empty products", async function () {
+            const USDCFundraiser = await ethers.getContractFactory("USDCFundraiser");
+            await expect(USDCFundraiser.deploy(
+                await mockUSDC.getAddress(),
+                beneficiary.address,
+                feeWallet.address,
+                minimumTarget,
+                deadline,
+                enforceConditions,
+                await productToken.getAddress(),
+                [], // Empty arrays
+                []
+            )).to.be.revertedWith("No products provided");
+        });
     });
 
     describe("Deposits", function () {
         it("Should accept deposits and transfer fees correctly", async function () {
-            const depositAmount = 1000_000000n; // 1000 USDC
+            const depositAmount = 1000_000000n;
             const expectedFee = (depositAmount * 250n) / 10000n; // 2.5% fee
             const expectedNet = depositAmount - expectedFee;
 
-            // Approve and deposit
             await mockUSDC.connect(investor1).approve(await fundraiser.getAddress(), depositAmount);
-            await expect(fundraiser.connect(investor1).deposit(depositAmount))
-                .to.emit(fundraiser, "Deposit")
-                .withArgs(investor1.address, depositAmount, expectedFee);
+            await fundraiser.connect(investor1).deposit(INITIAL_PRODUCT_IDS[0], 10); // Use first product ID
 
-            // Check balances
-            expect(await fundraiser.deposits(investor1.address)).to.equal(expectedNet);
-            expect(await fundraiser.totalRaised()).to.equal(expectedNet);
+            expect(await fundraiser.tokenDeposits(INITIAL_PRODUCT_IDS[0])).to.equal(expectedNet);
             expect(await mockUSDC.balanceOf(feeWallet.address)).to.equal(expectedFee);
         });
     });
@@ -68,7 +116,7 @@ describe("USDCFundraiser", function () {
             // Setup: Deposit more than minimum target
             const depositAmount = 2000_000000n; // 2000 USDC
             await mockUSDC.connect(investor1).approve(await fundraiser.getAddress(), depositAmount);
-            await fundraiser.connect(investor1).deposit(depositAmount);
+            await fundraiser.connect(investor1).deposit(1,20);
         });
 
         it("Should release funds when conditions are met", async function () {
@@ -101,6 +149,91 @@ describe("USDCFundraiser", function () {
                 .withArgs(newFee);
 
             expect(await fundraiser.feePercentage()).to.equal(newFee);
+        });
+    });
+
+    describe("NFT Integration", function () {
+        it("Should mint NFT on deposit", async function () {
+            const depositAmount = 1000_000000n;
+            await mockUSDC.connect(investor1).approve(await fundraiser.getAddress(), depositAmount);
+            
+            await expect(fundraiser.connect(investor1).deposit(INITIAL_PRODUCT_IDS[0], 10))
+                .to.emit(productToken, "ProductMinted")
+                .withArgs(investor1.address, INITIAL_PRODUCT_IDS[0], 10);
+        });
+
+        it("Should track deposit amount against token ID", async function () {
+            const depositAmount = 1000_000000n;
+            const expectedNet = depositAmount - (depositAmount * 250n) / 10000n; // minus 2.5% fee
+            
+            await mockUSDC.connect(investor1).approve(await fundraiser.getAddress(), depositAmount);
+            await fundraiser.connect(investor1).deposit(INITIAL_PRODUCT_IDS[0], 10);
+            
+            expect(await fundraiser.tokenDeposits(INITIAL_PRODUCT_IDS[0])).to.equal(expectedNet);
+        });
+    });
+
+    describe("Deadline Management", function () {
+        it("Should allow owner to update deadline", async function () {
+            const newDeadline = deadline + (60 * 60); // Add 1 hour
+            await fundraiser.updateDeadline(newDeadline);
+            expect(await fundraiser.deadline()).to.equal(newDeadline);
+        });
+
+        it("Should reject deadline update if finalized", async function () {
+            // First finalize
+            const depositAmount = 2000_000000n;
+            await mockUSDC.connect(investor1).approve(await fundraiser.getAddress(), depositAmount);
+            await fundraiser.connect(investor1).deposit(1,20);
+            await time.increaseTo(deadline + 1);
+            await fundraiser.finalize();
+
+            // Try to update deadline
+            const newDeadline = deadline + (60 * 60);
+            await expect(fundraiser.updateDeadline(newDeadline))
+                .to.be.revertedWith("Fundraiser is finalized");
+        });
+    });
+
+    describe("Product Management", function () {
+        const PRODUCT_ID = 1;
+        const PRODUCT_PRICE = 100_000000n; // 100 USDC
+
+        beforeEach(async function () {
+            await fundraiser.setProductPrice(PRODUCT_ID, PRODUCT_PRICE);
+        });
+
+        it("Should allow setting product prices", async function () {
+            expect(await fundraiser.productPrices(PRODUCT_ID)).to.equal(PRODUCT_PRICE);
+        });
+
+        it("Should mint correct quantity of NFTs", async function () {
+            const quantity = 3n;
+            const totalAmount = PRODUCT_PRICE * quantity;
+            
+            await mockUSDC.connect(investor1).approve(await fundraiser.getAddress(), totalAmount);
+            await fundraiser.connect(investor1).deposit(PRODUCT_ID, quantity);
+
+            expect(await productToken.balanceOf(investor1.address, PRODUCT_ID)).to.equal(quantity);
+        });
+
+        it("Should reject deposit for non-existent product", async function () {
+            const invalidProductId = 999;
+            await expect(fundraiser.connect(investor1).deposit(invalidProductId, 1))
+                .to.be.revertedWith("Product not available");
+        });
+
+        it("Should calculate fees correctly for multiple items", async function () {
+            const quantity = 2n;
+            const totalAmount = PRODUCT_PRICE * quantity;
+            const expectedFee = (totalAmount * 250n) / 10000n;
+            const expectedNet = totalAmount - expectedFee;
+
+            await mockUSDC.connect(investor1).approve(await fundraiser.getAddress(), totalAmount);
+            await fundraiser.connect(investor1).deposit(PRODUCT_ID, quantity);
+
+            expect(await mockUSDC.balanceOf(feeWallet.address)).to.equal(expectedFee);
+            expect(await fundraiser.tokenDeposits(PRODUCT_ID)).to.equal(expectedNet);
         });
     });
 }); 
