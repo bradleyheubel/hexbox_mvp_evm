@@ -4,8 +4,8 @@ import { IERC20 } from "../typechain-types/@openzeppelin/contracts/token/ERC20";
 
 async function main() {
     // Contract addresses from deployment (replace with your deployed addresses)
-    const FUNDRAISER_ADDRESS = "0x90B8a10fbA63f2DB713b8EC68A7f6e522f7e07a2"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
-    const PRODUCT_TOKEN_ADDRESS = "0xa2116A2edFd814Aa5a70C0C319706b436Feaa872"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
+    const FUNDRAISER_ADDRESS = "0x479841DfDE0512e31c5393E76B041E4c60c0935a"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
+    const PRODUCT_TOKEN_ADDRESS = "0xc23F6BDF9e1F6DD64C32862bca8188ed2bD0B126"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
     const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
 
     console.log("Testing contracts on Fuji...");
@@ -72,6 +72,30 @@ async function main() {
             const finalizeTx = await fundraiser.finalize();
             const finalizeReceipt = await finalizeTx.wait();
             console.log("Finalize successful:", finalizeReceipt?.hash);
+
+        // 9. Test refund claim if needed
+        console.log("\nTesting refund claim...");
+        const isFinalized = await fundraiser.finalized();
+        const targetMet = totalRaised >= minimumTarget;
+
+        if (isFinalized && !targetMet) {
+            console.log("Conditions met for refund. Attempting to claim...");
+            const refundTx = await fundraiser.claimRefund(productId);
+            const refundReceipt = await refundTx.wait();
+            console.log("Refund claimed:", refundReceipt?.hash);
+
+            // Verify NFT was burned
+            const nftBalanceAfterRefund = await productToken.balanceOf(signer.address, productId);
+            console.log("NFT Balance after refund:", nftBalanceAfterRefund.toString());
+
+            // Check USDC balance after refund
+            const usdcBalanceAfterRefund = await usdc.balanceOf(signer.address);
+            console.log("USDC Balance after refund:", ethers.formatUnits(usdcBalanceAfterRefund, 6));
+        } else {
+            console.log("Refund conditions not met:");
+            console.log("- Finalized:", isFinalized);
+            console.log("- Target met:", targetMet);
+        }
 
             // Check beneficiary balance
             const beneficiaryWallet = await fundraiser.beneficiaryWallet();

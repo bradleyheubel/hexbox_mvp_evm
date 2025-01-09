@@ -5,9 +5,10 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import "./ProductToken.sol";
 
-contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard {
+contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompatibleInterface {
     IERC20 public usdc;
     ProductToken public productToken;
     address public beneficiaryWallet;
@@ -94,7 +95,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard {
         emit Deposit(msg.sender, totalAmount, fee);
     }
 
-    function finalize() external nonReentrant whenNotPaused {
+    function finalize() public nonReentrant whenNotPaused {
         require(!finalized, "Already finalized");
         
         if (enforceConditions) {
@@ -158,5 +159,41 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard {
     function setProductPrice(uint256 productId, uint256 price) external onlyOwner {
         productPrices[productId] = price;
         emit ProductPriceSet(productId, price);
+    }
+
+    function claimRefund(uint256 productId) external {
+        require(finalized, "Not finalized");
+        require(totalRaised < minimumTarget, "Target was met");
+        
+        uint256 balance = productToken.balanceOf(msg.sender, productId);
+        require(balance > 0, "No tokens to refund");
+        
+        uint256 refundAmount = (tokenDeposits[productId] * balance) / productToken.productSupply(productId);
+        tokenDeposits[productId] = tokenDeposits[productId] - refundAmount;
+        
+        // Burn the NFTs first
+        productToken.burn(msg.sender, productId, balance);
+        
+        // Then send the refund
+        require(usdc.transfer(msg.sender, refundAmount), "Refund failed");
+        emit Refund(msg.sender, refundAmount);
+    }
+
+    // Add checkUpkeep function
+    function checkUpkeep(bytes calldata /* checkData */) 
+        external 
+        view 
+        override 
+        returns (bool upkeepNeeded, bytes memory /* performData */) 
+    {
+        upkeepNeeded = !finalized && block.timestamp > deadline;
+        return (upkeepNeeded, "");
+    }
+
+    // Add performUpkeep function
+    function performUpkeep(bytes calldata /* performData */) external override {
+        if (!finalized && block.timestamp > deadline) {
+            finalize();
+        }
     }
 } 

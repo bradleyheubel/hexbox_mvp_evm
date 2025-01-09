@@ -46,6 +46,11 @@ contract ProductToken is ERC1155, AccessControl {
         return _productSupply[productId];
     }
 
+    function burn(address from, uint256 productId, uint256 amount) external onlyRole(MINTER_ROLE) {
+        _burn(from, productId, amount);
+        _productSupply[productId] -= amount;
+    }
+
     // Required override
     function supportsInterface(bytes4 interfaceId)
         public

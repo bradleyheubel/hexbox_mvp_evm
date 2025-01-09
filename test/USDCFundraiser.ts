@@ -236,4 +236,133 @@ describe("USDCFundraiser", function () {
             expect(await fundraiser.tokenDeposits(PRODUCT_ID)).to.equal(expectedNet);
         });
     });
+
+    describe("Refunds", function () {
+        it("Should allow refund claim and burn NFTs", async function () {
+            // Setup: Make a deposit first
+            const productId = INITIAL_PRODUCT_IDS[0];
+            const quantity = 3n;
+            const totalAmount = INITIAL_PRODUCT_PRICES[0] * quantity;
+            
+            await mockUSDC.connect(investor1).approve(await fundraiser.getAddress(), totalAmount);
+            await fundraiser.connect(investor1).deposit(productId, quantity);
+            
+            // Record balances before refund
+            const balanceBefore = await mockUSDC.balanceOf(investor1.address);
+            const nftBalanceBefore = await productToken.balanceOf(investor1.address, productId);
+            
+            // Finalize (ensure minimum target not met)
+            await time.increaseTo(deadline + 1);
+            await fundraiser.finalize();
+            
+            // Claim refund
+            await fundraiser.connect(investor1).claimRefund(productId);
+            
+            // Check NFTs were burned
+            expect(await productToken.balanceOf(investor1.address, productId)).to.equal(0);
+            
+            // Check refund was received
+            const expectedRefund = totalAmount - (totalAmount * 250n) / 10000n; // minus 2.5% fee
+            expect(await mockUSDC.balanceOf(investor1.address)).to.equal(balanceBefore + expectedRefund);
+        });
+
+        it("Should reject refund claim if not finalized", async function () {
+            const productId = INITIAL_PRODUCT_IDS[0];
+            await expect(fundraiser.connect(investor1).claimRefund(productId))
+                .to.be.revertedWith("Not finalized");
+        });
+
+        it("Should reject refund claim if target was met", async function () {
+            // Meet the minimum target
+            const productId = INITIAL_PRODUCT_IDS[0];
+            const price = INITIAL_PRODUCT_PRICES[0];
+            const quantity = minimumTarget / price + 1n;
+            const depositAmount = price * quantity;
+
+            await mockUSDC.connect(investor1).approve(await fundraiser.getAddress(), depositAmount);
+            await fundraiser.connect(investor1).deposit(productId, quantity);
+
+            // Finalize
+            await time.increaseTo(deadline + 1);
+            await fundraiser.finalize();
+
+            // Try to claim refund
+            await expect(fundraiser.connect(investor1).claimRefund(productId))
+                .to.be.revertedWith("Target was met");
+        });
+
+        it("Should reject refund claim if no tokens held", async function () {
+            const productId = INITIAL_PRODUCT_IDS[0];
+            
+            // Finalize without any deposits
+            await time.increaseTo(deadline + 1);
+            await fundraiser.finalize();
+
+            await expect(fundraiser.connect(investor1).claimRefund(productId))
+                .to.be.revertedWith("No tokens to refund");
+        });
+
+        it("Should correctly handle multiple refund claims for same product", async function () {
+            const productId = INITIAL_PRODUCT_IDS[0];
+            const quantity1 = 3n;
+            const quantity2 = 2n;
+            const price = INITIAL_PRODUCT_PRICES[0];
+            
+            // Two investors buy same product
+            await mockUSDC.connect(investor1).approve(await fundraiser.getAddress(), price * quantity1);
+            await mockUSDC.connect(investor2).approve(await fundraiser.getAddress(), price * quantity2);
+            
+            await fundraiser.connect(investor1).deposit(productId, quantity1);
+            await fundraiser.connect(investor2).deposit(productId, quantity2);
+
+            // Finalize
+            await time.increaseTo(deadline + 1);
+            await fundraiser.finalize();
+
+            // Both claim refunds
+            await fundraiser.connect(investor1).claimRefund(productId);
+            await fundraiser.connect(investor2).claimRefund(productId);
+
+            // Verify both NFTs burned
+            expect(await productToken.balanceOf(investor1.address, productId)).to.equal(0);
+            expect(await productToken.balanceOf(investor2.address, productId)).to.equal(0);
+        });
+    });
+
+    describe("Chainlink Automation", function () {
+        it("Should report upkeep needed after deadline", async function () {
+            await time.increaseTo(deadline + 1);
+            const { upkeepNeeded } = await fundraiser.checkUpkeep("0x");
+            expect(upkeepNeeded).to.be.true;
+        });
+
+        it("Should not report upkeep needed before deadline", async function () {
+            const { upkeepNeeded } = await fundraiser.checkUpkeep("0x");
+            expect(upkeepNeeded).to.be.false;
+        });
+
+        it("Should not report upkeep needed if already finalized", async function () {
+            await time.increaseTo(deadline + 1);
+            await fundraiser.finalize();
+            const { upkeepNeeded } = await fundraiser.checkUpkeep("0x");
+            expect(upkeepNeeded).to.be.false;
+        });
+
+        it("Should execute finalization through performUpkeep", async function () {
+            // Make a deposit
+            const productId = INITIAL_PRODUCT_IDS[0];
+            const quantity = 1n;
+            const depositAmount = INITIAL_PRODUCT_PRICES[0] * quantity;
+            
+            await mockUSDC.connect(investor1).approve(await fundraiser.getAddress(), depositAmount);
+            await fundraiser.connect(investor1).deposit(productId, quantity);
+
+            // Move past deadline
+            await time.increaseTo(deadline + 1);
+
+            // Perform upkeep
+            await fundraiser.performUpkeep("0x");
+            expect(await fundraiser.finalized()).to.be.true;
+        });
+    });
 }); 
