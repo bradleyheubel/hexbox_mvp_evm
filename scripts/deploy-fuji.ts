@@ -1,4 +1,5 @@
 import { ethers } from "hardhat";
+import { registerUpkeep } from "./register-keeper";
 
 async function main() {
     const [deployer] = await ethers.getSigners();
@@ -36,10 +37,16 @@ async function main() {
             true,
             await productToken.getAddress(),
             productIds,
-            productPrices
+            productPrices,
+            ethers.ZeroAddress,  // Use default LINK address
+            ethers.ZeroAddress   // Use default Registrar address
         );
         await fundraiser.waitForDeployment();
         console.log("USDCFundraiser deployed to:", await fundraiser.getAddress());
+
+        // // Register Chainlink Upkeep
+        // console.log("\nRegistering Chainlink Upkeep...");
+        // await registerUpkeep(await fundraiser.getAddress());
 
         // Grant MINTER_ROLE to fundraiser
         console.log("\nGranting MINTER_ROLE to fundraiser...");
@@ -61,9 +68,74 @@ async function main() {
         console.log("Deadline:", new Date(deadline * 1000).toLocaleString());
         console.log("Minimum Target:", ethers.formatUnits(minimumTarget, 6), "USDC");
 
+        // After deployment, fund with LINK and register
+        const LINK_TOKEN = "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846";
+        
+        // Use explicit IERC20 ABI
+        const IERC20_ABI = [
+            "function balanceOf(address owner) view returns (uint256)",
+            "function transfer(address to, uint256 value) returns (bool)"
+        ];
+        const linkToken = new ethers.Contract(LINK_TOKEN, IERC20_ABI, deployer);
+
+        try {
+            // Check LINK balance
+            const linkBalance = await linkToken.balanceOf(deployer.address);
+            console.log("Deployer LINK balance:", ethers.formatEther(linkBalance));
+
+            if (linkBalance < ethers.parseEther("5")) {
+                throw new Error("Insufficient LINK tokens. Get some from https://faucets.chain.link/fuji");
+            }
+
+            // Transfer LINK to contract
+            console.log("Transferring LINK to contract...");
+            const transferTx = await linkToken.transfer(
+                await fundraiser.getAddress(),
+                ethers.parseEther("1")
+            );
+            await transferTx.wait();
+            
+            // Verify LINK transfer
+            const contractLinkBalance = await linkToken.balanceOf(await fundraiser.getAddress());
+            console.log("Contract LINK balance:", ethers.formatEther(contractLinkBalance));
+
+            // Register with Chainlink
+            console.log("Registering with Chainlink...");
+            try {
+                const tx = await fundraiser.registerWithChainlink({
+                    gasLimit: 3000000
+                });
+                console.log("Registration tx sent:", tx.hash);
+                
+                const receipt = await tx.wait(2);
+                console.log("Transaction status:", receipt?.status);
+                
+                // Check for events
+                if (receipt?.logs) {
+                    for (const log of receipt.logs) {
+                        try {
+                            const decodedLog = fundraiser.interface.parseLog(log);
+                            if (decodedLog) {
+                                console.log("Event:", decodedLog.name, decodedLog.args);
+                            }
+                        } catch (e) {
+                            // Skip logs that can't be decoded
+                        }
+                    }
+                }
+            } catch (error: any) {
+                console.error("Registration failed:", error.message);
+                throw error;
+            }
+
+        } catch (error) {
+            console.error("Error during deployment:", error);
+            throw error;
+        }
+
     } catch (error) {
-        console.error("Error during deployment:", error);
-        throw error;
+        console.error(error);
+        process.exit(1);
     }
 }
 

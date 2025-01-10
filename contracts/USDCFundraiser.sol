@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import "./ProductToken.sol";
+import "./interfaces/IAutomationRegistrar.sol";
 
 contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompatibleInterface {
     IERC20 public usdc;
@@ -25,12 +26,17 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     mapping(uint256 => uint256) public tokenDeposits; // tokenId => deposit amount
     mapping(uint256 => uint256) public productPrices;
 
+    address public CHAINLINK_REGISTRAR;
+    address public LINK_TOKEN;
+    bool public isRegisteredWithChainlink;
+
     event Deposit(address indexed depositor, uint256 amount, uint256 fee);
     event Refund(address indexed depositor, uint256 amount);
     event FundsReleased(address indexed beneficiary, uint256 amount);
     event FeeUpdated(uint256 newFeePercentage);
     event EmergencyWithdraw(address indexed to, uint256 amount);
     event ProductPriceSet(uint256 productId, uint256 price);
+    event Debug(string message, uint256 value);
 
     constructor(
         address _usdcAddress,
@@ -41,7 +47,9 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         bool _enforceConditions,
         address _productTokenAddress,
         uint256[] memory _productIds,
-        uint256[] memory _productPrices
+        uint256[] memory _productPrices,
+        address _linkToken,
+        address _chainlinkRegistrar
     ) Ownable(msg.sender) {
         require(_usdcAddress != address(0), "Invalid USDC address");
         require(_beneficiaryWallet != address(0), "Invalid beneficiary wallet");
@@ -64,6 +72,9 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
             productPrices[_productIds[i]] = _productPrices[i];
             emit ProductPriceSet(_productIds[i], _productPrices[i]);
         }
+
+        LINK_TOKEN = _linkToken;
+        CHAINLINK_REGISTRAR = _chainlinkRegistrar;
     }
 
     function deposit(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
@@ -97,10 +108,8 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
 
     function finalize() public nonReentrant whenNotPaused {
         require(!finalized, "Already finalized");
-        
         if (enforceConditions) {
             require(block.timestamp > deadline, "Deadline not reached");
-            
             if (totalRaised >= minimumTarget) {
                 _releaseFunds();
             } else {
@@ -109,7 +118,6 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         } else {
             _releaseFunds();
         }
-        
         finalized = true;
     }
 
@@ -194,6 +202,45 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     function performUpkeep(bytes calldata /* performData */) external override {
         if (!finalized && block.timestamp > deadline) {
             finalize();
+        }
+    }
+
+    // Add this function to USDCFundraiser contract
+    function registerWithChainlink() external onlyOwner {
+        require(!isRegisteredWithChainlink, "Already registered");
+        
+        // Check LINK balance first
+        uint256 linkBalance = IERC20(LINK_TOKEN).balanceOf(address(this));
+        require(linkBalance >= 5 ether, "Insufficient LINK balance");
+        
+        // Log pre-approval state
+        uint256 currentAllowance = IERC20(LINK_TOKEN).allowance(address(this), CHAINLINK_REGISTRAR);
+        emit Debug("Current allowance", currentAllowance);
+        
+        // Approve LINK transfer
+        bool approveSuccess = IERC20(LINK_TOKEN).approve(CHAINLINK_REGISTRAR, 5 ether);
+        require(approveSuccess, "LINK approval failed");
+        
+        // Log post-approval state
+        currentAllowance = IERC20(LINK_TOKEN).allowance(address(this), CHAINLINK_REGISTRAR);
+        emit Debug("New allowance", currentAllowance);
+        
+        // Attempt registration
+        try IAutomationRegistrar(CHAINLINK_REGISTRAR).register(
+            "USDCFundraiser Automation",
+            "",
+            address(this),
+            500000,
+            msg.sender,
+            "",
+            uint96(5 ether),
+            0
+        ) {
+            emit Debug("Registration successful", 1);
+            isRegisteredWithChainlink = true;
+        } catch Error(string memory reason) {
+            emit Debug("Registration failed", 0);
+            revert(string(abi.encodePacked("Registration failed: ", reason)));
         }
     }
 } 

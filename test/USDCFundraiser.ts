@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
-import { MockUSDC, USDCFundraiser, ProductToken } from "../typechain-types";
+import { MockUSDC, USDCFundraiser, ProductToken, MockAutomationRegistrar, MockLINK } from "../typechain-types";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("USDCFundraiser", function () {
@@ -20,6 +20,8 @@ describe("USDCFundraiser", function () {
 
     const INITIAL_PRODUCT_IDS = [1, 2];
     const INITIAL_PRODUCT_PRICES = [100_000000n, 200_000000n]; // 100 USDC, 200 USDC
+    let mockLink: MockLINK;
+    let mockRegistrar: MockAutomationRegistrar;
 
     beforeEach(async function () {
         // Get signers
@@ -36,7 +38,14 @@ describe("USDCFundraiser", function () {
         const ProductToken = await ethers.getContractFactory("ProductToken");
         productToken = await ProductToken.deploy("https://api.example.com/token/");
         
-        // Deploy fundraiser with initial products
+        // Deploy mocks first
+        const mockLINK = await ethers.getContractFactory("MockLINK");
+        mockLink = await mockLINK.deploy();
+        
+        const MockRegistrar = await ethers.getContractFactory("MockAutomationRegistrar");
+        mockRegistrar = await MockRegistrar.deploy();
+
+        // Deploy fundraiser with mock addresses
         const USDCFundraiser = await ethers.getContractFactory("USDCFundraiser");
         fundraiser = await USDCFundraiser.deploy(
             await mockUSDC.getAddress(),
@@ -47,7 +56,9 @@ describe("USDCFundraiser", function () {
             enforceConditions,
             await productToken.getAddress(),
             INITIAL_PRODUCT_IDS,
-            INITIAL_PRODUCT_PRICES
+            INITIAL_PRODUCT_PRICES,
+            await mockLink.getAddress(),
+            await mockRegistrar.getAddress()
         );
 
         // Grant MINTER_ROLE to fundraiser
@@ -77,7 +88,9 @@ describe("USDCFundraiser", function () {
                 enforceConditions,
                 await productToken.getAddress(),
                 [1], // One ID
-                [100_000000n, 200_000000n] // Two prices
+                [100_000000n, 200_000000n], // Two prices
+                await mockLink.getAddress(),
+                await mockRegistrar.getAddress()
             )).to.be.revertedWith("Arrays length mismatch");
         });
 
@@ -92,7 +105,9 @@ describe("USDCFundraiser", function () {
                 enforceConditions,
                 await productToken.getAddress(),
                 [], // Empty arrays
-                []
+                [],
+                await mockLink.getAddress(),
+                await mockRegistrar.getAddress()
             )).to.be.revertedWith("No products provided");
         });
     });
@@ -363,6 +378,41 @@ describe("USDCFundraiser", function () {
             // Perform upkeep
             await fundraiser.performUpkeep("0x");
             expect(await fundraiser.finalized()).to.be.true;
+        });
+
+        it("Should register with Chainlink successfully", async function () {
+            // Deploy mocks first
+            const MockLINK = await ethers.getContractFactory("MockLINK");
+            const mockLink = await MockLINK.deploy();
+            
+            const MockRegistrar = await ethers.getContractFactory("MockAutomationRegistrar");
+            const mockRegistrar = await MockRegistrar.deploy();
+
+            // Deploy fundraiser with mock addresses
+            const USDCFundraiser = await ethers.getContractFactory("USDCFundraiser");
+            const fundraiserWithMock = await USDCFundraiser.deploy(
+                await mockUSDC.getAddress(),
+                beneficiary.address,
+                feeWallet.address,
+                minimumTarget,
+                deadline,
+                enforceConditions,
+                await productToken.getAddress(),
+                INITIAL_PRODUCT_IDS,
+                INITIAL_PRODUCT_PRICES,
+                await mockLink.getAddress(),
+                await mockRegistrar.getAddress()
+            );
+
+            // Send LINK tokens to the contract
+            await mockLink.transfer(
+                await fundraiserWithMock.getAddress(), 
+                ethers.parseEther("5")
+            );
+
+            // Register with Chainlink
+            await expect(fundraiserWithMock.registerWithChainlink())
+                .to.not.be.reverted;
         });
     });
 }); 
