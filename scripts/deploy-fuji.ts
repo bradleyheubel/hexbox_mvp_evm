@@ -17,6 +17,7 @@ async function main() {
         // Deploy USDCFundraiser
         console.log("\nDeploying USDCFundraiser...");
         const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
+        const fundingType = 1; // 0 = all or nothing, 1 = limitless, 2 = flexible
         const thirtyMinutes = 30 * 60;
         const deadline = Math.floor(Date.now() / 1000) + thirtyMinutes;
         const minimumTarget = 5_000000n; // 5 USDC
@@ -32,14 +33,17 @@ async function main() {
             FUJI_USDC,
             beneficiaryWallet,
             feeWallet,
+            fundingType,
             minimumTarget,
             deadline,
             true,
             await productToken.getAddress(),
             productIds,
             productPrices,
-            ethers.ZeroAddress,  // Use default LINK address
-            ethers.ZeroAddress   // Use default Registrar address
+            "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846",  // Use default LINK address
+            "0xD23D3D1b81711D75E1012211f1b65Cc7dBB474e2",   // Use default Registrar address
+            "0x819B58A646CDd8289275A87653a2aA4902b14fe6",    // Use default Registry address
+            "0x3f678e11" // registerUpkeepSelector
         );
         await fundraiser.waitForDeployment();
         console.log("USDCFundraiser deployed to:", await fundraiser.getAddress());
@@ -65,72 +69,95 @@ async function main() {
         console.log("ProductToken:", await productToken.getAddress());
         console.log("USDCFundraiser:", await fundraiser.getAddress());
         console.log("Deployer:", deployer.address);
+        console.log("Funding Type:", fundingType);
         console.log("Deadline:", new Date(deadline * 1000).toLocaleString());
         console.log("Minimum Target:", ethers.formatUnits(minimumTarget, 6), "USDC");
 
-        // After deployment, fund with LINK and register
-        const LINK_TOKEN = "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846";
-        
-        // Use explicit IERC20 ABI
-        const IERC20_ABI = [
-            "function balanceOf(address owner) view returns (uint256)",
-            "function transfer(address to, uint256 value) returns (bool)"
-        ];
-        const linkToken = new ethers.Contract(LINK_TOKEN, IERC20_ABI, deployer);
+        if (fundingType != 1) {
+            // After deployment, fund with LINK and register
+            const LINK_TOKEN = "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846";
+                
+            const linkToken = await ethers.getContractAt("IERC20", LINK_TOKEN);
 
-        try {
-            // Check LINK balance
-            const linkBalance = await linkToken.balanceOf(deployer.address);
-            console.log("Deployer LINK balance:", ethers.formatEther(linkBalance));
-
-            if (linkBalance < ethers.parseEther("5")) {
-                throw new Error("Insufficient LINK tokens. Get some from https://faucets.chain.link/fuji");
-            }
-
-            // Transfer LINK to contract
-            console.log("Transferring LINK to contract...");
-            const transferTx = await linkToken.transfer(
-                await fundraiser.getAddress(),
-                ethers.parseEther("1")
-            );
-            await transferTx.wait();
-            
-            // Verify LINK transfer
-            const contractLinkBalance = await linkToken.balanceOf(await fundraiser.getAddress());
-            console.log("Contract LINK balance:", ethers.formatEther(contractLinkBalance));
-
-            // Register with Chainlink
-            console.log("Registering with Chainlink...");
             try {
-                const tx = await fundraiser.registerWithChainlink({
-                    gasLimit: 3000000
-                });
-                console.log("Registration tx sent:", tx.hash);
+                // Check LINK balance
+                const linkBalance = await linkToken.balanceOf(deployer.address);
+                console.log("Deployer LINK balance:", ethers.formatEther(linkBalance));
+
+                if (linkBalance < ethers.parseEther("1")) {
+                    throw new Error("Insufficient LINK tokens. Get some from https://faucets.chain.link/fuji");
+                }
+
+                // Transfer LINK to contract
+                console.log("Transferring LINK to contract...");
+                const transferTx = await linkToken.transfer(
+                    await fundraiser.getAddress(),
+                    ethers.parseEther("1")
+                );
+                await transferTx.wait();
                 
-                const receipt = await tx.wait(2);
-                console.log("Transaction status:", receipt?.status);
-                
-                // Check for events
-                if (receipt?.logs) {
-                    for (const log of receipt.logs) {
-                        try {
-                            const decodedLog = fundraiser.interface.parseLog(log);
-                            if (decodedLog) {
-                                console.log("Event:", decodedLog.name, decodedLog.args);
+                // Verify LINK transfer
+                const contractLinkBalance = await linkToken.balanceOf(await fundraiser.getAddress());
+                console.log("Contract LINK balance:", ethers.formatEther(contractLinkBalance));
+
+                // Register with Chainlink
+                console.log("Registering with Chainlink...");
+                const fundraiserAddress = await fundraiser.getAddress();
+                console.log("Fundraiser address:", fundraiserAddress);
+                console.log("Deployer address:", deployer.address);
+                try {
+                    const registrationParams = ethers.AbiCoder.defaultAbiCoder().encode(
+                        ["tuple(string,bytes,address,uint32,address,uint8,bytes,bytes,bytes,uint96)"],
+                        [
+                            [
+                                "testing",
+                                "0x",
+                                fundraiserAddress,
+                                300000,
+                                deployer.address,
+                                0,
+                                "0x",
+                                "0x",
+                                "0x",
+                                1000000000000000000n // 1 LINK
+                            ],
+                        ],
+                    )
+                    const tx = await fundraiser.initializeChainlink(
+                        registrationParams,
+                        {
+                            gasLimit: 3000000
+                        }
+                    );
+                    console.log("Registration tx sent:", tx.hash);
+                    
+                    const receipt = await tx.wait(2);
+                    console.log("Transaction status:", receipt?.status);
+                    console.log("Upkeep ID:", await fundraiser.getStationUpkeepID());
+                    // Check for events
+                    if (receipt?.logs) {
+                        for (const log of receipt.logs) {
+                            try {
+                                const decodedLog = fundraiser.interface.parseLog(log);
+                                if (decodedLog) {
+                                    console.log("Event:", decodedLog.name, decodedLog.args);
+                                }
+                            } catch (e) {
+                                // Skip logs that can't be decoded
                             }
-                        } catch (e) {
-                            // Skip logs that can't be decoded
                         }
                     }
+                } catch (error: any) {
+                    console.error("Registration failed:", error.message);
+                    throw error;
                 }
-            } catch (error: any) {
-                console.error("Registration failed:", error.message);
+
+            } catch (error) {
+                console.error("Error during deployment:", error);
                 throw error;
             }
-
-        } catch (error) {
-            console.error("Error during deployment:", error);
-            throw error;
+        } else {
+            console.log("Funding Type is limitless, skipping LINK transfer and Chainlink registration");
         }
 
     } catch (error) {

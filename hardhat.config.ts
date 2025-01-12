@@ -5,7 +5,16 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.27",
+  solidity: {
+    version: "0.8.27",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200
+      },
+      viaIR: true  // Add this line
+    }
+  },
   networks: {
     fuji: {
       url: "https://api.avax-test.network/ext/bc/C/rpc",

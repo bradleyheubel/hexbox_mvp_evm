@@ -8,8 +8,17 @@ interface IAutomationRegistrar {
         address upkeepContract,
         uint32 gasLimit,
         address adminAddress,
+        uint8 triggerType,
         bytes memory checkData,
+        bytes memory triggerConfig,
+        bytes memory offchainConfig,
         uint96 amount,
-        uint8 source
+        address sender
     ) external;
+
+    function onTokenTransfer(
+        address sender,
+        uint256 amount,
+        bytes calldata data
+    ) external returns (bool);
 }

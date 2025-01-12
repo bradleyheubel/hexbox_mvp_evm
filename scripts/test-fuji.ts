@@ -4,8 +4,8 @@ import { IERC20 } from "../typechain-types/@openzeppelin/contracts/token/ERC20";
 
 async function main() {
     // Contract addresses from deployment (replace with your deployed addresses)
-    const FUNDRAISER_ADDRESS = "0x479841DfDE0512e31c5393E76B041E4c60c0935a"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
-    const PRODUCT_TOKEN_ADDRESS = "0xc23F6BDF9e1F6DD64C32862bca8188ed2bD0B126"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
+    const FUNDRAISER_ADDRESS = "0x456Af835207bD255977F1BaC0Ec0fF31eD223aB4"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
+    const PRODUCT_TOKEN_ADDRESS = "0x2893A1F43c899d72e34464EE16941611F66FCeD3"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
     const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
 
     console.log("Testing contracts on Fuji...");
@@ -38,10 +38,10 @@ async function main() {
         console.log("USDC approved");
 
         // 4. Make deposit
-        // console.log("Making deposit for", quantity.toString(), "of product", productId, "...");
-        // const depositTx = await fundraiser.deposit(productId, quantity);
-        // const depositReceipt = await depositTx.wait();
-        // console.log("Deposit successful:", depositReceipt?.hash);
+        console.log("Making deposit for", quantity.toString(), "of product", productId, "...");
+        const depositTx = await fundraiser.deposit(productId, quantity);
+        const depositReceipt = await depositTx.wait();
+        console.log("Deposit successful:", depositReceipt?.hash);
 
         // 5. Check NFT balance
         const nftBalance = await productToken.balanceOf(signer.address, productId);
@@ -62,9 +62,9 @@ async function main() {
 
 
         // Add deadline extension test
-        // const timeNow = Math.floor(Date.now() / 1000) + 60;
-        // await fundraiser.updateDeadline(timeNow);
-        // console.log("Deadline updated to:", new Date(timeNow * 1000).toLocaleString());
+        const timeNow = Math.floor(Date.now() / 1000) + 60;
+        await fundraiser.updateDeadline(timeNow);
+        console.log("Deadline updated to:", new Date(timeNow * 1000).toLocaleString());
 
 
         // if (totalRaised >= minimumTarget) {
