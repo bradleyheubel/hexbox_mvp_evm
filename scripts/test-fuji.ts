@@ -4,8 +4,8 @@ import { IERC20 } from "../typechain-types/@openzeppelin/contracts/token/ERC20";
 
 async function main() {
     // Contract addresses from deployment (replace with your deployed addresses)
-    const FUNDRAISER_ADDRESS = "0x456Af835207bD255977F1BaC0Ec0fF31eD223aB4"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
-    const PRODUCT_TOKEN_ADDRESS = "0x2893A1F43c899d72e34464EE16941611F66FCeD3"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
+    const FUNDRAISER_ADDRESS = "0xdAd1c1fa82fD9d5A1AE3a16d77d32b4bB01F87C6"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
+    const PRODUCT_TOKEN_ADDRESS = "0x9e00EA412f610a9549789D802D13B36d1d793448"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
     const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
 
     console.log("Testing contracts on Fuji...");
@@ -25,7 +25,7 @@ async function main() {
         console.log("USDC Balance:", ethers.formatUnits(usdcBalance, 6));
 
         // 2. Get product price
-        const productId = 1; // First product
+        const productId = 4; // First product
         const productPrice = await fundraiser.productPrices(productId);
         console.log("Product", productId, "price:", ethers.formatUnits(productPrice, 6), "USDC");
 
@@ -38,10 +38,10 @@ async function main() {
         console.log("USDC approved");
 
         // 4. Make deposit
-        console.log("Making deposit for", quantity.toString(), "of product", productId, "...");
-        const depositTx = await fundraiser.deposit(productId, quantity);
-        const depositReceipt = await depositTx.wait();
-        console.log("Deposit successful:", depositReceipt?.hash);
+        // console.log("Making deposit for", quantity.toString(), "of product", productId, "...");
+        // const depositTx = await fundraiser.deposit(productId, quantity);
+        // const depositReceipt = await depositTx.wait();
+        // console.log("Deposit successful:", depositReceipt?.hash);
 
         // 5. Check NFT balance
         const nftBalance = await productToken.balanceOf(signer.address, productId);
@@ -61,19 +61,18 @@ async function main() {
         console.log("Progress:", (totalRaised * 100n) / minimumTarget, "%");
 
 
-        // Add deadline extension test
-        const timeNow = Math.floor(Date.now() / 1000) + 60;
-        await fundraiser.updateDeadline(timeNow);
-        console.log("Deadline updated to:", new Date(timeNow * 1000).toLocaleString());
+        // // Add deadline extension test
+        // const timeNow = Math.floor(Date.now() / 1000) + 60;
+        // await fundraiser.updateDeadline(timeNow);
+        // console.log("Deadline updated to:", new Date(timeNow * 1000).toLocaleString());
 
 
-        // if (totalRaised >= minimumTarget) {
-        //     console.log("Minimum target met, finalizing...");
-            const finalizeTx = await fundraiser.finalize();
-            const finalizeReceipt = await finalizeTx.wait();
-            console.log("Finalize successful:", finalizeReceipt?.hash);
+        // 9. Test finalize
+        // const finalizeTx = await fundraiser.finalize();
+        // const finalizeReceipt = await finalizeTx.wait();
+        // console.log("Finalize successful:", finalizeReceipt?.hash);
 
-        // 9. Test refund claim if needed
+        // 10. Test refund claim if needed
         console.log("\nTesting refund claim...");
         const isFinalized = await fundraiser.finalized();
         const targetMet = totalRaised >= minimumTarget;

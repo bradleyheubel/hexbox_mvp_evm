@@ -13,6 +13,9 @@ contract ProductToken is ERC1155, AccessControl {
     
     // Mapping to track total supply per token ID
     mapping(uint256 => uint256) private _productSupply;
+
+    // Array to track all product IDs
+    uint256[] private _productIds;
     
     // Base URI for metadata
     string private _baseUri;
@@ -28,6 +31,10 @@ contract ProductToken is ERC1155, AccessControl {
     }
 
     function mint(address to, uint256 productId, uint256 amount) external onlyRole(MINTER_ROLE) {
+        // Check if the product ID is already in the array
+        if (_productIds.length == 0 || _productIds[_productIds.length - 1] != productId) {
+            _productIds.push(productId);
+        }
         _productSupply[productId] += amount;
         _mint(to, productId, amount, "");
         emit ProductMinted(to, productId, amount);
@@ -44,6 +51,10 @@ contract ProductToken is ERC1155, AccessControl {
 
     function productSupply(uint256 productId) public view returns (uint256) {
         return _productSupply[productId];
+    }
+
+    function getProductIds() public view returns (uint256[] memory) {
+        return _productIds;
     }
 
     function burn(address from, uint256 productId, uint256 amount) external onlyRole(MINTER_ROLE) {

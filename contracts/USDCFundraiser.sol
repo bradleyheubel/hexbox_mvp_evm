@@ -137,7 +137,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         if (fundingType == 1) {
             _releaseFunds();
         }
-        
+
         totalRaised += netAmount;
 
         // Mint NFTs to depositor
@@ -221,6 +221,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     function claimRefund(uint256 productId) external {
         require(finalized, "Not finalized");
         require(fundingType != 1, "Limitless funding doesn't support refunds");
+        require(fundingType != 2, "Flexible funding doesn't support refunds");
         require(totalRaised < minimumTarget, "Target was met");
         
         uint256 balance = productToken.balanceOf(msg.sender, productId);

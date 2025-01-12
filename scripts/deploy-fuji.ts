@@ -1,5 +1,6 @@
 import { ethers } from "hardhat";
 import { registerUpkeep } from "./register-keeper";
+import { ProductToken } from "../typechain-types";
 
 async function main() {
     const [deployer] = await ethers.getSigners();
@@ -8,25 +9,29 @@ async function main() {
 
     try {
         // Deploy ProductToken
-        console.log("\nDeploying ProductToken...");
-        const ProductToken = await ethers.getContractFactory("ProductToken");
-        const productToken = await ProductToken.deploy("https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/campaign_products/metadata/");
-        await productToken.waitForDeployment();
-        console.log("ProductToken deployed to:", await productToken.getAddress());
+        // console.log("\nDeploying ProductToken...");
+        // const ProductToken = await ethers.getContractFactory("ProductToken");
+        // const productToken = await ProductToken.deploy("https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/campaign_products/metadata/");
+        // await productToken.waitForDeployment();
+        // console.log("ProductToken deployed to:", await productToken.getAddress());
+
+        // // Reference ProductToken
+        const PRODUCT_TOKEN_ADDRESS = "0x9e00EA412f610a9549789D802D13B36d1d793448";
+        const productToken = await ethers.getContractAt("ProductToken", PRODUCT_TOKEN_ADDRESS) as ProductToken;
 
         // Deploy USDCFundraiser
         console.log("\nDeploying USDCFundraiser...");
         const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
-        const fundingType = 1; // 0 = all or nothing, 1 = limitless, 2 = flexible
+        const fundingType = 0; // 0 = all or nothing, 1 = limitless, 2 = flexible
         const thirtyMinutes = 30 * 60;
         const deadline = Math.floor(Date.now() / 1000) + thirtyMinutes;
-        const minimumTarget = 5_000000n; // 5 USDC
+        const minimumTarget = 2_000000n; // 2 USDC
         const feeWallet = "0xf736851ECC29b787eA815262A3a3B76B45da58Be";
         const beneficiaryWallet = "0xDf839d46E8b2fA648DB995A2DA1405aF0982cb76";
 
         // Define initial products
-        const productIds = [1, 2];
-        const productPrices = [1_000000n, 2_000000n]; // 1 USDC, 2 USDC
+        const productIds = [4];
+        const productPrices = [2_000000n]; // 1 USDC, 2 USDC
 
         const USDCFundraiser = await ethers.getContractFactory("USDCFundraiser");
         const fundraiser = await USDCFundraiser.deploy(
