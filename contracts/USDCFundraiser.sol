@@ -142,6 +142,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
 
         // Mint NFTs to depositor
         productToken.mint(msg.sender, productId, quantity);
+        
         tokenDeposits[productId] += netAmount;
 
         emit Deposit(msg.sender, totalAmount, fee);
@@ -227,8 +228,9 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         uint256 balance = productToken.balanceOf(msg.sender, productId);
         require(balance > 0, "No tokens to refund");
         
-        uint256 refundAmount = (tokenDeposits[productId] * balance) / productToken.productSupply(productId);
-        tokenDeposits[productId] = tokenDeposits[productId] - refundAmount;
+        uint256 price = productPrices[productId];
+        uint256 fee = (price * feePercentage) / 10000;
+        uint256 refundAmount = (price - fee) * balance;
         
         // Burn the NFTs first
         productToken.burn(msg.sender, productId, balance);

@@ -25,7 +25,7 @@ async function main() {
         const fundingType = 0; // 0 = all or nothing, 1 = limitless, 2 = flexible
         const thirtyMinutes = 30 * 60;
         const deadline = Math.floor(Date.now() / 1000) + thirtyMinutes;
-        const minimumTarget = 2_000000n; // 2 USDC
+        const minimumTarget = 10_000000n; // 10 USDC
         const feeWallet = "0xf736851ECC29b787eA815262A3a3B76B45da58Be";
         const beneficiaryWallet = "0xDf839d46E8b2fA648DB995A2DA1405aF0982cb76";
 

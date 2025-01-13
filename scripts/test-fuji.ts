@@ -4,7 +4,7 @@ import { IERC20 } from "../typechain-types/@openzeppelin/contracts/token/ERC20";
 
 async function main() {
     // Contract addresses from deployment (replace with your deployed addresses)
-    const FUNDRAISER_ADDRESS = "0xdAd1c1fa82fD9d5A1AE3a16d77d32b4bB01F87C6"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
+    const FUNDRAISER_ADDRESS = "0x541868f3A4c1b9954e65a9c84d33BeD02D33F940"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
     const PRODUCT_TOKEN_ADDRESS = "0x9e00EA412f610a9549789D802D13B36d1d793448"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
     const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
 
