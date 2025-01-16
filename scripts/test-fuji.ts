@@ -4,7 +4,7 @@ import { IERC20 } from "../typechain-types/@openzeppelin/contracts/token/ERC20";
 
 async function main() {
     // Contract addresses from deployment (replace with your deployed addresses)
-    const FUNDRAISER_ADDRESS = "0x541868f3A4c1b9954e65a9c84d33BeD02D33F940"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
+    const FUNDRAISER_ADDRESS = "0x0b6D5617435B878A680eCc902f0484929B6Cf0f8"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
     const PRODUCT_TOKEN_ADDRESS = "0x9e00EA412f610a9549789D802D13B36d1d793448"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
     const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
 
@@ -76,10 +76,17 @@ async function main() {
         console.log("\nTesting refund claim...");
         const isFinalized = await fundraiser.finalized();
         const targetMet = totalRaised >= minimumTarget;
+        const fundingType = await fundraiser.fundingType();
 
-        if (isFinalized && !targetMet) {
+        console.log("Is finalized:", isFinalized);
+        console.log("Target met:", targetMet);
+        console.log("Funding type:", fundingType);
+
+
+        // if (isFinalized && !targetMet) {
             console.log("Conditions met for refund. Attempting to claim...");
-            const refundTx = await fundraiser.claimRefund(productId);
+            const refundQuantity = 1n;
+            const refundTx = await fundraiser.claimRefund(productId, refundQuantity);
             const refundReceipt = await refundTx.wait();
             console.log("Refund claimed:", refundReceipt?.hash);
 
@@ -90,11 +97,14 @@ async function main() {
             // Check USDC balance after refund
             const usdcBalanceAfterRefund = await usdc.balanceOf(signer.address);
             console.log("USDC Balance after refund:", ethers.formatUnits(usdcBalanceAfterRefund, 6));
-        } else {
-            console.log("Refund conditions not met:");
-            console.log("- Finalized:", isFinalized);
-            console.log("- Target met:", targetMet);
-        }
+       
+            const totalRaisedAfterRefund = await fundraiser.totalRaised();
+            console.log("Total raised after refund:", ethers.formatUnits(totalRaisedAfterRefund, 6), "USDC");
+            // } else {
+        //     console.log("Refund conditions not met:");
+        //     console.log("- Finalized:", isFinalized);
+        //     console.log("- Target met:", targetMet);
+        // }
 
             // Check beneficiary balance
             const beneficiaryWallet = await fundraiser.beneficiaryWallet();

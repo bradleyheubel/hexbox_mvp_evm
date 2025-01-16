@@ -22,7 +22,7 @@ async function main() {
         // Deploy USDCFundraiser
         console.log("\nDeploying USDCFundraiser...");
         const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
-        const fundingType = 0; // 0 = all or nothing, 1 = limitless, 2 = flexible
+        const fundingType = 1; // 0 = all or nothing, 1 = limitless, 2 = flexible
         const thirtyMinutes = 30 * 60;
         const deadline = Math.floor(Date.now() / 1000) + thirtyMinutes;
         const minimumTarget = 10_000000n; // 10 USDC

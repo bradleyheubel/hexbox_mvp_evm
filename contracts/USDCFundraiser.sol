@@ -59,7 +59,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     }
 
     event Deposit(address indexed depositor, uint256 amount, uint256 fee);
-    event Refund(address indexed depositor, uint256 amount);
+    event Refund(address indexed depositor, uint256 amount, uint256 productId, uint256 quantity);
     event FundsReleased(address indexed beneficiary, uint256 amount);
     event FeeUpdated(uint256 newFeePercentage);
     event EmergencyWithdraw(address indexed to, uint256 amount);
@@ -121,7 +121,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     function deposit(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
         require(quantity > 0, "Quantity must be greater than 0");
         require(!finalized || fundingType == 1, "Fundraiser is finalized");
-        require(productPrices[productId] > 0, "Product not available");
+        require(productPrices[productId] > 0, "Product not available for this campaign");
         
         uint256 totalAmount = productPrices[productId] * quantity;
         uint256 fee = (totalAmount * feePercentage) / 10000;
@@ -131,11 +131,6 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         
         if (fee > 0) {
             require(usdc.transfer(feeWallet, fee), "Fee transfer failed");
-        }
-
-        // For limitless funding, send funds directly to beneficiary
-        if (fundingType == 1) {
-            _releaseFunds();
         }
 
         totalRaised += netAmount;
@@ -150,15 +145,15 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
 
     function finalize() public nonReentrant whenNotPaused {
         require(!finalized, "Already finalized");
-        require(fundingType != 1, "Limitless funding doesn't need finalization");
         
         if (fundingType == 0) {
             require(block.timestamp > deadline, "Deadline not reached");
             if (totalRaised >= minimumTarget) {
                 _releaseFunds();
-            } else {
-                _processRefunds();
             }
+        } else if (fundingType == 1) {
+            require(msg.sender == owner(), "Only owner can finalize limitless funding");
+            _releaseFunds();
         } else if (fundingType == 2) {
             require(block.timestamp > deadline, "Deadline not reached");
             _releaseFunds();
@@ -173,15 +168,6 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         require(contractBalance > 0, "No funds to release");
         require(usdc.transfer(beneficiaryWallet, contractBalance), "Transfer failed");
         emit FundsReleased(beneficiaryWallet, contractBalance);
-    }
-
-    function _processRefunds() private {
-        for (address depositor = address(0); deposits[depositor] > 0;) {
-            uint256 amount = deposits[depositor];
-            deposits[depositor] = 0;
-            require(usdc.transfer(depositor, amount), "Refund failed");
-            emit Refund(depositor, amount);
-        }
     }
 
     // Admin functions
@@ -219,25 +205,28 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         emit ProductPriceSet(productId, price);
     }
 
-    function claimRefund(uint256 productId) external {
-        require(finalized, "Not finalized");
-        require(fundingType != 1, "Limitless funding doesn't support refunds");
-        require(fundingType != 2, "Flexible funding doesn't support refunds");
-        require(totalRaised < minimumTarget, "Target was met");
+    function claimRefund(uint256 productId, uint256 quantity) external {
+        if (fundingType == 0) {
+            require(!(finalized && totalRaised >= minimumTarget), "Target was met, refunds not available.");
+        } else {
+            require(!finalized, "Campaign is finalized, refunds not available.");
+        }
         
         uint256 balance = productToken.balanceOf(msg.sender, productId);
         require(balance > 0, "No tokens to refund");
-        
+        require(balance >= quantity, "Insufficient tokens to refund");
         uint256 price = productPrices[productId];
         uint256 fee = (price * feePercentage) / 10000;
-        uint256 refundAmount = (price - fee) * balance;
+        uint256 refundAmount = (price - fee) * quantity;
         
         // Burn the NFTs first
-        productToken.burn(msg.sender, productId, balance);
+        productToken.burn(msg.sender, productId, quantity);
+
+        totalRaised -= refundAmount;
         
         // Then send the refund
         require(usdc.transfer(msg.sender, refundAmount), "Refund failed");
-        emit Refund(msg.sender, refundAmount);
+        emit Refund(msg.sender, refundAmount, productId, quantity);
     }
 
     function _getStationUpkeepRegistry() internal view returns (IAutomationRegistryConsumer registry) {
