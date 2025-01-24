@@ -352,17 +352,24 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         emit ProductRemoved(productId);
     }
 
-    function updateProduct(ProductConfig memory product) external onlyOwner {
-        require(product.price > 0, "Invalid price");
-        require(products[product.productId].price > 0, "Product does not exist");
+    function updateProductPrice(uint256 productId, uint256 price) external onlyOwner {
+        require(price > 0, "Invalid price");
+        require(products[productId].price > 0, "Product does not exist");
+
+        products[productId].price = price;
+        emit ProductUpdated(productId, price, products[productId].supplyLimit);
+    }
+
+    function updateProductSupply(uint256 productId, uint256 supplyLimit) external onlyOwner {
+        require(products[productId].price > 0, "Product does not exist");
         
         // If reducing supply limit, check if it's still above sold count
-        if (product.supplyLimit > 0) {
-            require(product.supplyLimit >= productSoldCount[product.productId], 
+        if (supplyLimit > 0) {
+            require(supplyLimit >= productSoldCount[productId], 
                 "New supply limit below sold count");
         }
 
-        products[product.productId] = product;
-        emit ProductUpdated(product.productId, product.price, product.supplyLimit);
+        products[productId].supplyLimit = supplyLimit;
+        emit ProductUpdated(productId, products[productId].price, supplyLimit);
     }
 } 

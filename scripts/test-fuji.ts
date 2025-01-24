@@ -4,7 +4,7 @@ import { IERC20 } from "../typechain-types/@openzeppelin/contracts/token/ERC20";
 
 async function main() {
     // Contract addresses from deployment (replace with your deployed addresses)
-    const FUNDRAISER_ADDRESS = "0xf329CE23FDAD6942f3D72b7D2B375DCf5e56781A"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
+    const FUNDRAISER_ADDRESS = "0x75F8310bd7Ef4678c4271c3b68F52F782E36F668"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
     const PRODUCT_TOKEN_ADDRESS = "0xa7B70DA7aa425E3dFF61D07DC197125F1E819E1c"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
     const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
 
@@ -60,16 +60,39 @@ async function main() {
     const fundingType = await fundraiser.fundingType();
     console.log("Funding type:", fundingType);
 
-    /*
+    
     try {
         // 1. Check USDC balance
         const usdcBalance = await usdc.balanceOf(signer.address);
         console.log("USDC Balance:", ethers.formatUnits(usdcBalance, 6));
 
         // 2. Get product price
-        const productId = 4; // First product
-        const productPrice = await fundraiser.productPrices(productId);
-        console.log("Product", productId, "price:", ethers.formatUnits(productPrice, 6), "USDC");
+        const productId = 9837413n; // First product
+        const product = await fundraiser.products(productId);
+        const productPrice = product[1]
+        console.log(`Product: ${product}`)
+        console.log(`Product price: ${productPrice}`)
+
+        // const changePrice = await fundraiser.updateProductPrice(productId, 100_000000n);
+        // await changePrice.wait();
+
+        // const updatedProduct = await fundraiser.products(productId);
+        // const newProductPrice = updatedProduct[1]
+        // console.log(`Updated product price: ${newProductPrice}`)
+        //console.log("Product", productId, "price:", ethers.formatUnits(productPrice, 6), "USDC");
+
+        // Remove product
+        const removeProduct = await fundraiser.removeProduct(5436457n);
+        await removeProduct.wait();
+
+        console.log("Product removed");
+        const newProductIds = await fundraiser.getProductIds();
+        console.log("New product IDs:", newProductIds);
+
+        // Add new product
+        // const newProduct = {productId: 5436457n, price: 35_000000n, supplyLimit: 1000n}
+        // const addProduct = await fundraiser.addProduct(newProduct);
+        // await addProduct.wait();
 
         // 3. Approve USDC spending
         const quantity = 1n;
@@ -159,7 +182,7 @@ async function main() {
     } catch (error) {
         console.error("Error during testing:", error);
     }
-    */
+    
 }
 
 main()
