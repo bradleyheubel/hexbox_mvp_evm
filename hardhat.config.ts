@@ -19,7 +19,7 @@ const config: HardhatUserConfig = {
     fuji: {
       url: "https://api.avax-test.network/ext/bc/C/rpc",
       chainId: 43113,
-      accounts: [process.env.PRIVATE_KEY_2 as string],
+      accounts: [process.env.PRIVATE_KEY as string],
     }
   }
 };

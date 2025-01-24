@@ -1,17 +1,18 @@
 import { ethers } from "hardhat";
-import { ProductToken, USDCFundraiser } from "../typechain-types";
+import { ProductToken, USDCFundraiser, USDCFundraiserFactory } from "../typechain-types";
 import { IERC20 } from "../typechain-types/@openzeppelin/contracts/token/ERC20";
 
 async function main() {
     // Contract addresses from deployment (replace with your deployed addresses)
-    const FUNDRAISER_ADDRESS = "0x0b6D5617435B878A680eCc902f0484929B6Cf0f8"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
-    const PRODUCT_TOKEN_ADDRESS = "0x9e00EA412f610a9549789D802D13B36d1d793448"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
+    const FUNDRAISER_ADDRESS = "0xf329CE23FDAD6942f3D72b7D2B375DCf5e56781A"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
+    const PRODUCT_TOKEN_ADDRESS = "0xa7B70DA7aa425E3dFF61D07DC197125F1E819E1c"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
     const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
 
     console.log("Testing contracts on Fuji...");
 
     // Get contract instances
     const fundraiser = await ethers.getContractAt("USDCFundraiser", FUNDRAISER_ADDRESS) as USDCFundraiser;
+    //const factory = await ethers.getContractAt("USDCFundraiserFactory", FACTORY_ADDRESS) as USDCFundraiserFactory;
     const productToken = await ethers.getContractAt("ProductToken", PRODUCT_TOKEN_ADDRESS) as ProductToken;
     const usdc = await ethers.getContractAt("IERC20", FUJI_USDC) as IERC20;
 
@@ -19,6 +20,47 @@ async function main() {
     const [signer] = await ethers.getSigners();
     console.log("Testing with address:", signer.address);
 
+    const productIds = await fundraiser.getProductIds();
+    console.log("Product IDs:", productIds);
+
+    if (productIds.length === 0) {
+        console.log("No products found");
+    } else {
+        console.log("Product IDs:", productIds);
+    }
+    if (productIds.length > 0) {    
+        const product = await fundraiser.products(productIds[2]);
+        const productId = product.productId;
+        const productPrice = product.price;
+        console.log("Product", productId, "price:", ethers.formatUnits(productPrice, 6), "USDC");
+
+        const productSupplyLimit = product.supplyLimit;
+        console.log("Product", productId, "supply limit:", productSupplyLimit);
+        
+        const productSoldCount = await fundraiser.productSoldCount(productId);
+        console.log("Product", productId, "sold count:", productSoldCount);
+    }
+
+    const deadline = await fundraiser.deadline();
+    console.log("Deadline:", new Date(Number(deadline) * 1000).toLocaleString());
+
+    const totalRaised = await fundraiser.totalRaised();
+    console.log("Total raised:", ethers.formatUnits(totalRaised, 6), "USDC");
+
+    const minimumTarget = await fundraiser.minimumTarget();
+    console.log("Minimum target:", ethers.formatUnits(minimumTarget, 6), "USDC");
+    console.log("Progress:", (totalRaised * 100n) / minimumTarget, "%");
+
+    const isFinalized = await fundraiser.finalized();
+    console.log("Is finalized:", isFinalized);
+
+    const targetMet = totalRaised >= minimumTarget;
+    console.log("Target met:", targetMet);
+
+    const fundingType = await fundraiser.fundingType();
+    console.log("Funding type:", fundingType);
+
+    /*
     try {
         // 1. Check USDC balance
         const usdcBalance = await usdc.balanceOf(signer.address);
@@ -38,10 +80,10 @@ async function main() {
         console.log("USDC approved");
 
         // 4. Make deposit
-        // console.log("Making deposit for", quantity.toString(), "of product", productId, "...");
-        // const depositTx = await fundraiser.deposit(productId, quantity);
-        // const depositReceipt = await depositTx.wait();
-        // console.log("Deposit successful:", depositReceipt?.hash);
+        console.log("Making deposit for", quantity.toString(), "of product", productId, "...");
+        const depositTx = await fundraiser.deposit(productId, quantity);
+        const depositReceipt = await depositTx.wait();
+        console.log("Deposit successful:", depositReceipt?.hash);
 
         // 5. Check NFT balance
         const nftBalance = await productToken.balanceOf(signer.address, productId);
@@ -84,32 +126,32 @@ async function main() {
 
 
         // if (isFinalized && !targetMet) {
-            console.log("Conditions met for refund. Attempting to claim...");
-            const refundQuantity = 1n;
-            const refundTx = await fundraiser.claimRefund(productId, refundQuantity);
-            const refundReceipt = await refundTx.wait();
-            console.log("Refund claimed:", refundReceipt?.hash);
+        //     console.log("Conditions met for refund. Attempting to claim...");
+        //     const refundQuantity = 1n;
+        //     const refundTx = await fundraiser.claimRefund(productId, refundQuantity);
+        //     const refundReceipt = await refundTx.wait();
+        //     console.log("Refund claimed:", refundReceipt?.hash);
 
-            // Verify NFT was burned
-            const nftBalanceAfterRefund = await productToken.balanceOf(signer.address, productId);
-            console.log("NFT Balance after refund:", nftBalanceAfterRefund.toString());
+        //     // Verify NFT was burned
+        //     const nftBalanceAfterRefund = await productToken.balanceOf(signer.address, productId);
+        //     console.log("NFT Balance after refund:", nftBalanceAfterRefund.toString());
 
-            // Check USDC balance after refund
-            const usdcBalanceAfterRefund = await usdc.balanceOf(signer.address);
-            console.log("USDC Balance after refund:", ethers.formatUnits(usdcBalanceAfterRefund, 6));
+        //     // Check USDC balance after refund
+        //     const usdcBalanceAfterRefund = await usdc.balanceOf(signer.address);
+        //     console.log("USDC Balance after refund:", ethers.formatUnits(usdcBalanceAfterRefund, 6));
        
-            const totalRaisedAfterRefund = await fundraiser.totalRaised();
-            console.log("Total raised after refund:", ethers.formatUnits(totalRaisedAfterRefund, 6), "USDC");
-            // } else {
-        //     console.log("Refund conditions not met:");
-        //     console.log("- Finalized:", isFinalized);
-        //     console.log("- Target met:", targetMet);
-        // }
+        //     const totalRaisedAfterRefund = await fundraiser.totalRaised();
+        //     console.log("Total raised after refund:", ethers.formatUnits(totalRaisedAfterRefund, 6), "USDC");
+        //     // } else {
+        // //     console.log("Refund conditions not met:");
+        // //     console.log("- Finalized:", isFinalized);
+        // //     console.log("- Target met:", targetMet);
+        // // }
 
-            // Check beneficiary balance
-            const beneficiaryWallet = await fundraiser.beneficiaryWallet();
-            const beneficiaryBalance = await usdc.balanceOf(beneficiaryWallet);
-            console.log("Beneficiary balance:", ethers.formatUnits(beneficiaryBalance, 6), "USDC");
+        //     // Check beneficiary balance
+        //     const beneficiaryWallet = await fundraiser.beneficiaryWallet();
+        //     const beneficiaryBalance = await usdc.balanceOf(beneficiaryWallet);
+        //     console.log("Beneficiary balance:", ethers.formatUnits(beneficiaryBalance, 6), "USDC");
         // } else {
         //     console.log("Minimum target not met yet");
         // }
@@ -117,6 +159,7 @@ async function main() {
     } catch (error) {
         console.error("Error during testing:", error);
     }
+    */
 }
 
 main()

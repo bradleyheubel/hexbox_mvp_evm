@@ -7,10 +7,15 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import "./ProductToken.sol";
-import "./interfaces/IAutomationRegistrar.sol";
 import {IAutomationRegistryConsumer} from
     "@chainlink/contracts/src/v0.8/automation/interfaces/IAutomationRegistryConsumer.sol";
 import {IAutomationForwarder} from "@chainlink/contracts/src/v0.8/automation/interfaces/IAutomationForwarder.sol";
+
+struct ProductConfig {
+    uint256 productId;
+    uint256 price;
+    uint256 supplyLimit;  // 0 means unlimited supply
+}
 
 contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompatibleInterface {
     IERC20 public usdc;
@@ -19,7 +24,6 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     address public feeWallet;
     uint256 public minimumTarget;
     uint256 public deadline;
-    bool public enforceConditions;
     uint256 public feePercentage; // Stored as basis points (e.g., 250 = 2.5%)
     
     mapping(address => uint256) public deposits;
@@ -27,7 +31,8 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     bool public finalized;
     uint256 private currentTokenId;
     mapping(uint256 => uint256) public tokenDeposits; // tokenId => deposit amount
-    mapping(uint256 => uint256) public productPrices;
+    uint256[] public productIds;
+    mapping(uint256 => uint256) public productSoldCount;    // productId => current sold count
 
     address CHAINLINK_REGISTRAR;
     address CHAINLINK_REGISTRY;
@@ -40,6 +45,8 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     bytes4 s_registerUpkeepSelector;
 
     uint256 public fundingType; // 0 = all or nothing, 1 = limitless, 2 = flexible
+
+    mapping(uint256 => ProductConfig) public products;
 
     function getStationUpkeepID() public view returns (uint256) {
         return s_stationUpkeepID;
@@ -70,6 +77,9 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     event UpkeepPerformed();
     event UpkeepRegistered(uint256 upkeepID);
     event Finalized();
+    event ProductAdded(uint256 productId, uint256 price, uint256 supplyLimit);
+    event ProductRemoved(uint256 productId);
+    event ProductUpdated(uint256 productId, uint256 price, uint256 supplyLimit);
     
     constructor(
         address _usdcAddress,
@@ -78,10 +88,8 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         uint256 _fundingType, // Add funding type parameter
         uint256 _minimumTarget,
         uint256 _deadline,
-        bool _enforceConditions,
         address _productTokenAddress,
-        uint256[] memory _productIds,
-        uint256[] memory _productPrices,
+        ProductConfig[] memory _products,  // Single array of product configurations
         address _linkToken,
         address _chainlinkRegistrar,
         address _chainlinkRegistry,
@@ -90,23 +98,25 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         require(_usdcAddress != address(0), "Invalid USDC address");
         require(_beneficiaryWallet != address(0), "Invalid beneficiary wallet");
         require(_feeWallet != address(0), "Invalid fee wallet");
-        require(_productIds.length == _productPrices.length, "Arrays length mismatch");
-        require(_productIds.length > 0, "No products provided");
+        require(_products.length > 0, "No products provided");
         
         usdc = IERC20(_usdcAddress);
         beneficiaryWallet = _beneficiaryWallet;
         feeWallet = _feeWallet;
         minimumTarget = _minimumTarget;
         deadline = _deadline;
-        enforceConditions = _enforceConditions;
         feePercentage = 250; // 2.5% default fee
         productToken = ProductToken(_productTokenAddress);
-
-        // Set initial product prices
-        for(uint256 i = 0; i < _productIds.length; i++) {
-            require(_productPrices[i] > 0, "Invalid product price");
-            productPrices[_productIds[i]] = _productPrices[i];
-            emit ProductPriceSet(_productIds[i], _productPrices[i]);
+        
+        // Store product configurations
+        for(uint256 i = 0; i < _products.length; i++) {
+            require(_products[i].price > 0, "Invalid product price");
+            require(_products[i].productId > 0, "Invalid product ID");
+            
+            productIds.push(_products[i].productId);
+            products[_products[i].productId] = _products[i];
+            
+            emit ProductPriceSet(_products[i].productId, _products[i].price);
         }
 
         LINK_TOKEN = _linkToken;
@@ -119,11 +129,14 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     }
 
     function deposit(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
-        require(quantity > 0, "Quantity must be greater than 0");
-        require(!finalized || fundingType == 1, "Fundraiser is finalized");
-        require(productPrices[productId] > 0, "Product not available for this campaign");
+        ProductConfig memory product = products[productId];
+        require(product.price > 0, "Product not available");
         
-        uint256 totalAmount = productPrices[productId] * quantity;
+        if(product.supplyLimit > 0) {
+            require(productSoldCount[productId] + quantity <= product.supplyLimit, "Exceeds supply limit");
+        }
+        
+        uint256 totalAmount = product.price * quantity;
         uint256 fee = (totalAmount * feePercentage) / 10000;
         uint256 netAmount = totalAmount - fee;
 
@@ -139,6 +152,13 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         productToken.mint(msg.sender, productId, quantity);
         
         tokenDeposits[productId] += netAmount;
+
+        // Check supply limit
+        if(product.supplyLimit > 0) {
+            require(productSoldCount[productId] + quantity <= product.supplyLimit, "Exceeds supply limit");
+        }
+        
+        productSoldCount[productId] += quantity;
 
         emit Deposit(msg.sender, totalAmount, fee);
     }
@@ -200,12 +220,21 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         deadline = newDeadline;
     }
 
+    function getProductIds() public view returns (uint256[] memory) {
+        return productIds;
+    }
+
     function setProductPrice(uint256 productId, uint256 price) external onlyOwner {
-        productPrices[productId] = price;
+        require(productSoldCount[productId] == 0, "Product has active sales");
+
+        products[productId].price = price;
         emit ProductPriceSet(productId, price);
     }
 
     function claimRefund(uint256 productId, uint256 quantity) external {
+        ProductConfig memory product = products[productId];
+        require(product.price > 0, "Invalid product");
+        
         if (fundingType == 0) {
             require(!(finalized && totalRaised >= minimumTarget), "Target was met, refunds not available.");
         } else {
@@ -215,13 +244,15 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         uint256 balance = productToken.balanceOf(msg.sender, productId);
         require(balance > 0, "No tokens to refund");
         require(balance >= quantity, "Insufficient tokens to refund");
-        uint256 price = productPrices[productId];
-        uint256 fee = (price * feePercentage) / 10000;
-        uint256 refundAmount = (price - fee) * quantity;
+        uint256 fee = (product.price * feePercentage) / 10000;
+        uint256 refundAmount = (product.price - fee) * quantity;
         
         // Burn the NFTs first
         productToken.burn(msg.sender, productId, quantity);
 
+        // Update supply count
+        productSoldCount[productId] -= quantity;
+        
         totalRaised -= refundAmount;
         
         // Then send the refund
@@ -291,5 +322,47 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
             }
         }
         return abi.decode(returnData, (uint256));
+    }
+
+    function addProduct(ProductConfig memory product) external onlyOwner {
+        require(product.price > 0, "Invalid price");
+        require(product.productId > 0, "Invalid product ID");
+        require(products[product.productId].price == 0, "Product already exists");
+
+        products[product.productId] = product;
+        productIds.push(product.productId);
+        
+        emit ProductAdded(product.productId, product.price, product.supplyLimit);
+    }
+
+    function removeProduct(uint256 productId) external onlyOwner {
+        require(products[productId].price > 0, "Product does not exist");
+        require(productSoldCount[productId] == 0, "Product has active sales");
+
+        // Remove from productIds array
+        for (uint i = 0; i < productIds.length; i++) {
+            if (productIds[i] == productId) {
+                productIds[i] = productIds[productIds.length - 1];
+                productIds.pop();
+                break;
+            }
+        }
+
+        delete products[productId];
+        emit ProductRemoved(productId);
+    }
+
+    function updateProduct(ProductConfig memory product) external onlyOwner {
+        require(product.price > 0, "Invalid price");
+        require(products[product.productId].price > 0, "Product does not exist");
+        
+        // If reducing supply limit, check if it's still above sold count
+        if (product.supplyLimit > 0) {
+            require(product.supplyLimit >= productSoldCount[product.productId], 
+                "New supply limit below sold count");
+        }
+
+        products[product.productId] = product;
+        emit ProductUpdated(product.productId, product.price, product.supplyLimit);
     }
 } 

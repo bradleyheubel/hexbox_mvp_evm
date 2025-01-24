@@ -1,6 +1,6 @@
 import { ethers } from "hardhat";
 import { registerUpkeep } from "./register-keeper";
-import { ProductToken } from "../typechain-types";
+import { ProductToken, USDCFundraiserFactory } from "../typechain-types";
 
 async function main() {
     const [deployer] = await ethers.getSigners();
@@ -11,47 +11,137 @@ async function main() {
         // Deploy ProductToken
         // console.log("\nDeploying ProductToken...");
         // const ProductToken = await ethers.getContractFactory("ProductToken");
-        // const productToken = await ProductToken.deploy("https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/campaign_products/metadata/");
-        // await productToken.waitForDeployment();
-        // console.log("ProductToken deployed to:", await productToken.getAddress());
+        // const deployedProductToken = await ProductToken.deploy(
+        //     "https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/campaign_products/metadata/"
+        // );
+        // await deployedProductToken.waitForDeployment();
+        // console.log("ProductToken deployed to:", await deployedProductToken.getAddress());
 
-        // // Reference ProductToken
-        const PRODUCT_TOKEN_ADDRESS = "0x9e00EA412f610a9549789D802D13B36d1d793448";
+        // Reference ProductToken
+        const PRODUCT_TOKEN_ADDRESS = "0xa7B70DA7aa425E3dFF61D07DC197125F1E819E1c"//await deployedProductToken.getAddress(); //"0x535AcaB2100261f8d2A7C3BBdaE7BA7F340eD9fB";
         const productToken = await ethers.getContractAt("ProductToken", PRODUCT_TOKEN_ADDRESS) as ProductToken;
+
+        const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
+        const LINK_TOKEN = "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846";
+        const CHAINLINK_REGISTRAR = "0xD23D3D1b81711D75E1012211f1b65Cc7dBB474e2";
+        const CHAINLINK_REGISTRY = "0x819B58A646CDd8289275A87653a2aA4902b14fe6";
+        const REGISTER_UPKEEP_SELECTOR = "0x3f678e11";
+
+        // Deploy USDCFundraiserFactory
+        console.log("\nDeploying USDCFundraiserFactory...");
+        const USDCFundraiserFactory = await ethers.getContractFactory("USDCFundraiserFactory");
+        
+        const factory = await USDCFundraiserFactory.deploy(
+            FUJI_USDC,
+            PRODUCT_TOKEN_ADDRESS,
+            LINK_TOKEN,
+            CHAINLINK_REGISTRAR,
+            CHAINLINK_REGISTRY,
+            REGISTER_UPKEEP_SELECTOR
+        );
+        await factory.waitForDeployment();
+        console.log("USDCFundraiserFactory deployed to:", await factory.getAddress());
+
+        const FACTORY_ADDRESS = await factory.getAddress(); //"0x36e68c8910d424730d96f5C405371fAb86bB5682";
+        //const factory = await ethers.getContractAt("USDCFundraiserFactory", FACTORY_ADDRESS);
 
         // Deploy USDCFundraiser
         console.log("\nDeploying USDCFundraiser...");
-        const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
-        const fundingType = 1; // 0 = all or nothing, 1 = limitless, 2 = flexible
+        const fundingType = 0; // 0 = all or nothing, 1 = limitless, 2 = flexible
         const thirtyMinutes = 30 * 60;
         const deadline = Math.floor(Date.now() / 1000) + thirtyMinutes;
         const minimumTarget = 10_000000n; // 10 USDC
         const feeWallet = "0xf736851ECC29b787eA815262A3a3B76B45da58Be";
         const beneficiaryWallet = "0xDf839d46E8b2fA648DB995A2DA1405aF0982cb76";
 
-        // Define initial products
-        const productIds = [4];
-        const productPrices = [2_000000n]; // 1 USDC, 2 USDC
+        // // Define initial products
+        // const productIds = [1, 5];
+        // const productPrices = [2_000000n, 1_000000n]; // 1 USDC, 2 USDC
+        // const productSupplyLimits = [100, 100];
 
-        const USDCFundraiser = await ethers.getContractFactory("USDCFundraiser");
-        const fundraiser = await USDCFundraiser.deploy(
-            FUJI_USDC,
-            beneficiaryWallet,
-            feeWallet,
-            fundingType,
-            minimumTarget,
-            deadline,
-            true,
-            await productToken.getAddress(),
-            productIds,
-            productPrices,
-            "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846",  // Use default LINK address
-            "0xD23D3D1b81711D75E1012211f1b65Cc7dBB474e2",   // Use default Registrar address
-            "0x819B58A646CDd8289275A87653a2aA4902b14fe6",    // Use default Registry address
-            "0x3f678e11" // registerUpkeepSelector
-        );
-        await fundraiser.waitForDeployment();
-        console.log("USDCFundraiser deployed to:", await fundraiser.getAddress());
+        const products = [
+            {
+                productId: 9837413n,
+                price: 1_000000n,     // 1 USDC
+                supplyLimit: 100n     // Limited to 100
+            },
+            {
+                productId: 7823310n,
+                price: 2_000000n,     // 2 USDC
+                supplyLimit: 0n       // Unlimited supply
+            },
+            {
+                productId: 6453789n,
+                price: 3_000000n,     // 3 USDC
+                supplyLimit: 200n     // Limited to 200
+            }
+        ];
+
+        // // Check factory's LINK balance
+        // const linkToken = await ethers.getContractAt("IERC20", LINK_TOKEN);
+        // const factoryLinkBalance = await linkToken.balanceOf(FACTORY_ADDRESS);
+        // console.log("Factory LINK balance:", ethers.formatEther(factoryLinkBalance));
+
+        // // Transfer LINK to factory if needed
+        // if (factoryLinkBalance < ethers.parseEther("1")) {
+        //     console.log("Transferring LINK to factory...");
+        //     const tx = await linkToken.transfer(FACTORY_ADDRESS, ethers.parseEther("1"));
+        //     await tx.wait();
+
+        //     console.log("New factory LINK balance:", 
+        //         ethers.formatEther(await linkToken.balanceOf(FACTORY_ADDRESS))
+        //     );
+        // }
+
+            const fundraiserTx = await factory.createFundraiser(
+                beneficiaryWallet,
+                feeWallet,
+                fundingType,
+                minimumTarget,
+                deadline,
+                products,
+                { gasLimit: 5000000 } // Increase gas limit significantly
+            );
+            console.log("Fundraiser tx sent:", fundraiserTx.hash);
+
+            const receipt = await fundraiserTx.wait();
+            console.log("Fundraiser tx receipt: ", receipt);
+            const event = factory.interface.parseLog(receipt!.logs[0]);
+            let fundraiserAddress = "";
+            // console.log("---- loop ---")
+            receipt!.logs.forEach(log => {
+                //console.log(factory.interface.parseLog(log));
+                if (factory.interface.parseLog(log)?.name == "FundraiserCreated") {
+                    fundraiserAddress = factory.interface.parseLog(log)?.args[0];
+                    console.log("Fundraiser deployed to:", fundraiserAddress);
+                }
+            })
+            
+            const fundraiser = await ethers.getContractAt("USDCFundraiser", fundraiserAddress);
+            // const upkeepId = await fundraiser.getStationUpkeepID();
+            // console.log("Upkeep ID:", upkeepId);
+        
+
+
+        // const USDCFundraiser = await ethers.getContractFactory("USDCFundraiser");
+        // const fundraiser = await USDCFundraiser.deploy(
+        //     FUJI_USDC,
+        //     beneficiaryWallet,
+        //     feeWallet,
+        //     fundingType,
+        //     minimumTarget,
+        //     deadline,
+        //     true,
+        //     await productToken.getAddress(),
+        //     productIds,
+        //     productPrices,
+        //     LINK_TOKEN,
+        //     CHAINLINK_REGISTRAR,
+        //     CHAINLINK_REGISTRY,
+        //     REGISTER_UPKEEP_SELECTOR
+        // );
+        // await fundraiser.waitForDeployment();
+        // console.log("USDCFundraiser deployed to:", await fundraiser.getAddress());
 
         // // Register Chainlink Upkeep
         // console.log("\nRegistering Chainlink Upkeep...");
@@ -61,7 +151,7 @@ async function main() {
         console.log("\nGranting MINTER_ROLE to fundraiser...");
         const grantRole = await productToken.grantRole(
             await productToken.MINTER_ROLE(),
-            await fundraiser.getAddress()
+            fundraiserAddress
         );
         await grantRole.wait();
         console.log("MINTER_ROLE granted to fundraiser");
@@ -71,16 +161,25 @@ async function main() {
         console.log("--------------------");
         console.log("Network: Avalanche Fuji Testnet");
         console.log("USDC Address:", FUJI_USDC);
-        console.log("ProductToken:", await productToken.getAddress());
-        console.log("USDCFundraiser:", await fundraiser.getAddress());
+        console.log("ProductToken:", PRODUCT_TOKEN_ADDRESS);
+        console.log("USDCFundraiser:", fundraiserAddress);
         console.log("Deployer:", deployer.address);
         console.log("Funding Type:", fundingType);
         console.log("Deadline:", new Date(deadline * 1000).toLocaleString());
         console.log("Minimum Target:", ethers.formatUnits(minimumTarget, 6), "USDC");
+        console.log("Products:", products);
 
         if (fundingType != 1) {
+
+            const fundraiser = await ethers.getContractAt("USDCFundraiser", fundraiserAddress);
+
+            // const tx = await fundraiser.connect(deployer).updateFeePercentage(10);
+            // await tx.wait();
+            // console.log("Fee updated to 10 ", tx.hash);
+
+
+            //const fundraiserAddress = await fundraiser.getAddress();
             // After deployment, fund with LINK and register
-            const LINK_TOKEN = "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846";
                 
             const linkToken = await ethers.getContractAt("IERC20", LINK_TOKEN);
 
@@ -128,12 +227,18 @@ async function main() {
                             ],
                         ],
                     )
+                    const estimatedGas = await fundraiser.initializeChainlink.estimateGas(
+                        registrationParams
+                    );
+                    const gasLimit = estimatedGas * 105n / 100n;
+                    console.log("Estimated gas:", estimatedGas);
+                    console.log("Gas limit:", gasLimit);
                     const tx = await fundraiser.initializeChainlink(
                         registrationParams,
                         {
-                            gasLimit: 3000000
+                            gasLimit: gasLimit
                         }
-                    );
+                    )
                     console.log("Registration tx sent:", tx.hash);
                     
                     const receipt = await tx.wait(2);
