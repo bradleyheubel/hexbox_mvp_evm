@@ -48,6 +48,13 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
 
     mapping(uint256 => ProductConfig) public products;
 
+    address public campaignAdmin;
+
+    modifier onlyAdminOrOwner() {
+        require(msg.sender == owner() || msg.sender == campaignAdmin, "Not authorized");
+        _;
+    }
+
     function getStationUpkeepID() public view returns (uint256) {
         return s_stationUpkeepID;
     }
@@ -85,20 +92,22 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         address _usdcAddress,
         address _beneficiaryWallet,
         address _feeWallet,
-        uint256 _fundingType, // Add funding type parameter
+        uint256 _fundingType,
         uint256 _minimumTarget,
         uint256 _deadline,
         address _productTokenAddress,
-        ProductConfig[] memory _products,  // Single array of product configurations
+        ProductConfig[] memory _products,
         address _linkToken,
         address _chainlinkRegistrar,
         address _chainlinkRegistry,
-        bytes4 _chainlinkRegistrarSelector
+        bytes4 _chainlinkRegistrarSelector,
+        address _campaignAdmin
     ) Ownable(msg.sender) {
         require(_usdcAddress != address(0), "Invalid USDC address");
         require(_beneficiaryWallet != address(0), "Invalid beneficiary wallet");
         require(_feeWallet != address(0), "Invalid fee wallet");
         require(_products.length > 0, "No products provided");
+        require(_campaignAdmin != address(0), "Invalid campaign admin");
         
         usdc = IERC20(_usdcAddress);
         beneficiaryWallet = _beneficiaryWallet;
@@ -126,6 +135,8 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
 
         require(_fundingType <= 2, "Invalid funding type");
         fundingType = _fundingType;
+
+        campaignAdmin = _campaignAdmin;
     }
 
     function deposit(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
@@ -140,27 +151,31 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         uint256 fee = (totalAmount * feePercentage) / 10000;
         uint256 netAmount = totalAmount - fee;
 
+        // Transfer USDC first
         require(usdc.transferFrom(msg.sender, address(this), totalAmount), "Transfer failed");
         
+        // Handle fee transfer
         if (fee > 0) {
             require(usdc.transfer(feeWallet, fee), "Fee transfer failed");
         }
 
-        totalRaised += netAmount;
-
-        // Mint NFTs to depositor
-        productToken.mint(msg.sender, productId, quantity);
-        
-        tokenDeposits[productId] += netAmount;
-
-        // Check supply limit
-        if(product.supplyLimit > 0) {
-            require(productSoldCount[productId] + quantity <= product.supplyLimit, "Exceeds supply limit");
+        // Try to mint NFT before updating state
+        try productToken.mint(msg.sender, productId, quantity) {
+            // Only update state after successful mint
+            totalRaised += netAmount;
+            tokenDeposits[productId] += netAmount;
+            productSoldCount[productId] += quantity;
+            
+            emit Deposit(msg.sender, totalAmount, fee);
+        } catch Error(string memory reason) {
+            // Revert the USDC transfer if mint fails
+            require(usdc.transfer(msg.sender, totalAmount), "Refund failed after mint error");
+            revert(string.concat("NFT mint failed: ", reason));
+        } catch (bytes memory /*lowLevelData*/) {
+            // Handle low-level errors
+            require(usdc.transfer(msg.sender, totalAmount), "Refund failed after mint error");
+            revert("NFT mint failed with low-level error");
         }
-        
-        productSoldCount[productId] += quantity;
-
-        emit Deposit(msg.sender, totalAmount, fee);
     }
 
     function finalize() public nonReentrant whenNotPaused {
@@ -324,7 +339,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         return abi.decode(returnData, (uint256));
     }
 
-    function addProduct(ProductConfig memory product) external onlyOwner {
+    function addProduct(ProductConfig memory product) external onlyAdminOrOwner {
         require(product.price > 0, "Invalid price");
         require(product.productId > 0, "Invalid product ID");
         require(products[product.productId].price == 0, "Product already exists");
@@ -335,7 +350,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         emit ProductAdded(product.productId, product.price, product.supplyLimit);
     }
 
-    function removeProduct(uint256 productId) external onlyOwner {
+    function removeProduct(uint256 productId) external onlyAdminOrOwner {
         require(products[productId].price > 0, "Product does not exist");
         require(productSoldCount[productId] == 0, "Product has active sales");
 
@@ -352,7 +367,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         emit ProductRemoved(productId);
     }
 
-    function updateProductPrice(uint256 productId, uint256 price) external onlyOwner {
+    function updateProductPrice(uint256 productId, uint256 price) external onlyAdminOrOwner {
         require(price > 0, "Invalid price");
         require(products[productId].price > 0, "Product does not exist");
 
@@ -360,7 +375,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         emit ProductUpdated(productId, price, products[productId].supplyLimit);
     }
 
-    function updateProductSupply(uint256 productId, uint256 supplyLimit) external onlyOwner {
+    function updateProductSupply(uint256 productId, uint256 supplyLimit) external onlyAdminOrOwner {
         require(products[productId].price > 0, "Product does not exist");
         
         // If reducing supply limit, check if it's still above sold count
@@ -371,5 +386,10 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
 
         products[productId].supplyLimit = supplyLimit;
         emit ProductUpdated(productId, products[productId].price, supplyLimit);
+    }
+
+    function updateCampaignAdmin(address newAdmin) external onlyOwner {
+        require(newAdmin != address(0), "Invalid admin address");
+        campaignAdmin = newAdmin;
     }
 } 

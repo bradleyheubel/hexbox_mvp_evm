@@ -12,13 +12,13 @@ async function main() {
         // console.log("\nDeploying ProductToken...");
         // const ProductToken = await ethers.getContractFactory("ProductToken");
         // const deployedProductToken = await ProductToken.deploy(
-        //     "https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/campaign_products/metadata/"
+        //     "https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/products_metadata/"
         // );
         // await deployedProductToken.waitForDeployment();
         // console.log("ProductToken deployed to:", await deployedProductToken.getAddress());
 
         // Reference ProductToken
-        const PRODUCT_TOKEN_ADDRESS = "0xa7B70DA7aa425E3dFF61D07DC197125F1E819E1c"//await deployedProductToken.getAddress(); //"0x535AcaB2100261f8d2A7C3BBdaE7BA7F340eD9fB";
+        const PRODUCT_TOKEN_ADDRESS = "0x49216924D47184954e25940a6352abc4b03AbAeD" //await deployedProductToken.getAddress();
         const productToken = await ethers.getContractAt("ProductToken", PRODUCT_TOKEN_ADDRESS) as ProductToken;
 
         const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
@@ -31,7 +31,7 @@ async function main() {
         console.log("\nDeploying USDCFundraiserFactory...");
         const USDCFundraiserFactory = await ethers.getContractFactory("USDCFundraiserFactory");
         
-        const factory = await USDCFundraiserFactory.deploy(
+        const deployedFactory = await USDCFundraiserFactory.deploy(
             FUJI_USDC,
             PRODUCT_TOKEN_ADDRESS,
             LINK_TOKEN,
@@ -39,11 +39,11 @@ async function main() {
             CHAINLINK_REGISTRY,
             REGISTER_UPKEEP_SELECTOR
         );
-        await factory.waitForDeployment();
-        console.log("USDCFundraiserFactory deployed to:", await factory.getAddress());
+        await deployedFactory.waitForDeployment();
+        console.log("USDCFundraiserFactory deployed to:", await deployedFactory.getAddress());
 
-        const FACTORY_ADDRESS = await factory.getAddress(); //"0x36e68c8910d424730d96f5C405371fAb86bB5682";
-        //const factory = await ethers.getContractAt("USDCFundraiserFactory", FACTORY_ADDRESS);
+        const FACTORY_ADDRESS = await deployedFactory.getAddress(); //"0x2BC4F4757c5dDd37409B5d3D90811BBb652a96C4"; //"0x36e68c8910d424730d96f5C405371fAb86bB5682";
+        const factory = await ethers.getContractAt("USDCFundraiserFactory", FACTORY_ADDRESS);
 
         // Deploy USDCFundraiser
         console.log("\nDeploying USDCFundraiser...");
