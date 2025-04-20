@@ -26,6 +26,8 @@ async function main() {
         const CHAINLINK_REGISTRAR = "0xD23D3D1b81711D75E1012211f1b65Cc7dBB474e2";
         const CHAINLINK_REGISTRY = "0x819B58A646CDd8289275A87653a2aA4902b14fe6";
         const REGISTER_UPKEEP_SELECTOR = "0x3f678e11";
+        const DEFAULT_FEE_PERCENTAGE = 250; // 2.5% default fee
+        const FEE_WALLET = "0xB60c975cC83168C298EfE5334A110DA33618B48d";
 
         // Deploy USDCFundraiserFactory
         console.log("\nDeploying USDCFundraiserFactory...");
@@ -37,7 +39,9 @@ async function main() {
             LINK_TOKEN,
             CHAINLINK_REGISTRAR,
             CHAINLINK_REGISTRY,
-            REGISTER_UPKEEP_SELECTOR
+            REGISTER_UPKEEP_SELECTOR,
+            DEFAULT_FEE_PERCENTAGE,
+            FEE_WALLET
         );
         await deployedFactory.waitForDeployment();
         console.log("USDCFundraiserFactory deployed to:", await deployedFactory.getAddress());
@@ -95,7 +99,6 @@ async function main() {
 
             const fundraiserTx = await factory.createFundraiser(
                 beneficiaryWallet,
-                feeWallet,
                 fundingType,
                 minimumTarget,
                 deadline,

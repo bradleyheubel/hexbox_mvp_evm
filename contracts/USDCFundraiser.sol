@@ -26,10 +26,10 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     uint256 public deadline;
     uint256 public feePercentage; // Stored as basis points (e.g., 250 = 2.5%)
     
-    mapping(address => uint256) public deposits;
+    //mapping(address => uint256) public deposits;
     uint256 public totalRaised;
     bool public finalized;
-    uint256 private currentTokenId;
+    //uint256 private currentTokenId;
     mapping(uint256 => uint256) public tokenDeposits; // tokenId => deposit amount
     uint256[] public productIds;
     mapping(uint256 => uint256) public productSoldCount;    // productId => current sold count
@@ -92,6 +92,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         address _usdcAddress,
         address _beneficiaryWallet,
         address _feeWallet,
+        uint256 _feePercentage,
         uint256 _fundingType,
         uint256 _minimumTarget,
         uint256 _deadline,
@@ -114,7 +115,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         feeWallet = _feeWallet;
         minimumTarget = _minimumTarget;
         deadline = _deadline;
-        feePercentage = 250; // 2.5% default fee
+        feePercentage = _feePercentage;
         productToken = ProductToken(_productTokenAddress);
         
         // Store product configurations
@@ -206,11 +207,11 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     }
 
     // Admin functions
-    function updateFeePercentage(uint256 newFeePercentage) external onlyOwner {
-        require(newFeePercentage <= 1000, "Fee cannot exceed 10%");
-        feePercentage = newFeePercentage;
-        emit FeeUpdated(newFeePercentage);
-    }
+    // function updateFeePercentage(uint256 newFeePercentage) external onlyOwner {
+    //     require(newFeePercentage <= 1000, "Fee cannot exceed 10%");
+    //     feePercentage = newFeePercentage;
+    //     emit FeeUpdated(newFeePercentage);
+    // }
 
     function pause() external onlyOwner {
         _pause();

@@ -6,15 +6,27 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract USDCFundraiserFactory is Ownable {
-    address public immutable usdcAddress;
-    address public immutable productTokenAddress;
-    address public immutable linkToken;
-    address public immutable chainlinkRegistrar;
-    address public immutable chainlinkRegistry;
-    bytes4 public immutable chainlinkRegistrarSelector;
-
+    address public usdcAddress;
+    address public productTokenAddress;
+    address public linkToken;
+    address public chainlinkRegistrar;
+    address public chainlinkRegistry;
+    bytes4 public chainlinkRegistrarSelector;
+    uint256 public defaultFeePercentage;
+    address public feeWallet;
     event FundraiserCreated(address indexed fundraiser, address indexed creator);
     event Debug(string message);
+
+    // Add mapping for special fees
+    mapping(address => uint256) private specialFees;
+    mapping(address => bool) private hasSpecialFee;  // New mapping to track if special fee is set
+    
+    // Function for owner to set special fee for a specific address
+    function setSpecialFee(address creator, uint256 specialFeePercentage) external onlyOwner {
+        require(specialFeePercentage <= 1000, "Fee cannot exceed 10%");
+        specialFees[creator] = specialFeePercentage;
+        hasSpecialFee[creator] = true;  // Mark that this creator has a special fee set
+    }
 
     constructor(
         address _usdcAddress,
@@ -22,7 +34,9 @@ contract USDCFundraiserFactory is Ownable {
         address _linkToken,
         address _chainlinkRegistrar,
         address _chainlinkRegistry,
-        bytes4 _chainlinkRegistrarSelector
+        bytes4 _chainlinkRegistrarSelector,
+        uint256 _defaultFeePercentage,
+        address _feeWallet
     ) Ownable(msg.sender) {
         usdcAddress = _usdcAddress;
         productTokenAddress = _productTokenAddress;
@@ -30,20 +44,29 @@ contract USDCFundraiserFactory is Ownable {
         chainlinkRegistrar = _chainlinkRegistrar;
         chainlinkRegistry = _chainlinkRegistry;
         chainlinkRegistrarSelector = _chainlinkRegistrarSelector;
+        defaultFeePercentage = _defaultFeePercentage;
+        feeWallet = _feeWallet;
     }
 
     function createFundraiser(
         address beneficiaryWallet,
-        address feeWallet,
         uint256 fundingType,
         uint256 minimumTarget,
         uint256 deadline,
         ProductConfig[] memory products
     ) external returns (address) {
         require(beneficiaryWallet != address(0), "Invalid beneficiary");
-        require(feeWallet != address(0), "Invalid fee wallet");
         require(deadline > block.timestamp, "Invalid deadline");
         require(products.length > 0, "No products");
+
+        // Modified fee logic
+        uint256 feeToUse = hasSpecialFee[msg.sender] ? specialFees[msg.sender] : defaultFeePercentage;
+        
+        // Clear the special fee after use
+        if (hasSpecialFee[msg.sender]) {
+            delete specialFees[msg.sender];
+            delete hasSpecialFee[msg.sender];
+        }
 
         address campaignAdmin = msg.sender;
 
@@ -51,6 +74,7 @@ contract USDCFundraiserFactory is Ownable {
             usdcAddress,
             beneficiaryWallet,
             feeWallet,
+            feeToUse,
             fundingType,
             minimumTarget,
             deadline,
@@ -105,4 +129,20 @@ contract USDCFundraiserFactory is Ownable {
         emit FundraiserCreated(address(fundraiser), msg.sender);
         return address(fundraiser);
     }
-} 
+
+    function changeDefaultFeePercentage(uint256 newFeePercentage) external onlyOwner {
+        defaultFeePercentage = newFeePercentage;
+    }
+
+    function getSpecialFee(address creator) external view returns (uint256) {
+        return hasSpecialFee[creator] ? specialFees[creator] : defaultFeePercentage;
+    }
+
+    function changeFeeWallet(address newFeeWallet) external onlyOwner {
+        feeWallet = newFeeWallet; // Changes Hexbox Fee Wallet
+    }
+
+    function getFeeWallet() external view returns (address) {
+        return feeWallet;
+    }
+}
