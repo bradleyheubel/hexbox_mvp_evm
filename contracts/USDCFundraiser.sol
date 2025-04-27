@@ -206,13 +206,6 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         emit FundsReleased(beneficiaryWallet, contractBalance);
     }
 
-    // Admin functions
-    // function updateFeePercentage(uint256 newFeePercentage) external onlyOwner {
-    //     require(newFeePercentage <= 1000, "Fee cannot exceed 10%");
-    //     feePercentage = newFeePercentage;
-    //     emit FeeUpdated(newFeePercentage);
-    // }
-
     function pause() external onlyOwner {
         _pause();
     }
