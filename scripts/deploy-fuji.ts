@@ -22,10 +22,10 @@ async function main() {
         const productToken = await ethers.getContractAt("ProductToken", PRODUCT_TOKEN_ADDRESS) as ProductToken;
 
         const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
-        const LINK_TOKEN = "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846";
-        const CHAINLINK_REGISTRAR = "0xD23D3D1b81711D75E1012211f1b65Cc7dBB474e2";
-        const CHAINLINK_REGISTRY = "0x819B58A646CDd8289275A87653a2aA4902b14fe6";
-        const REGISTER_UPKEEP_SELECTOR = "0x3f678e11";
+        // const LINK_TOKEN = "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846";
+        // const CHAINLINK_REGISTRAR = "0xD23D3D1b81711D75E1012211f1b65Cc7dBB474e2";
+        // const CHAINLINK_REGISTRY = "0x819B58A646CDd8289275A87653a2aA4902b14fe6";
+        // const REGISTER_UPKEEP_SELECTOR = "0x3f678e11";
         const DEFAULT_FEE_PERCENTAGE = 250; // 2.5% default fee
         const FEE_WALLET = "0xB60c975cC83168C298EfE5334A110DA33618B48d";
 
@@ -36,10 +36,10 @@ async function main() {
         const deployedFactory = await USDCFundraiserFactory.deploy(
             FUJI_USDC,
             PRODUCT_TOKEN_ADDRESS,
-            LINK_TOKEN,
-            CHAINLINK_REGISTRAR,
-            CHAINLINK_REGISTRY,
-            REGISTER_UPKEEP_SELECTOR,
+            // LINK_TOKEN,
+            // CHAINLINK_REGISTRAR,
+            // CHAINLINK_REGISTRY,
+            // REGISTER_UPKEEP_SELECTOR,
             DEFAULT_FEE_PERCENTAGE,
             FEE_WALLET
         );
@@ -172,9 +172,9 @@ async function main() {
         console.log("Minimum Target:", ethers.formatUnits(minimumTarget, 6), "USDC");
         console.log("Products:", products);
 
-        if (fundingType != 1) {
+        //if (fundingType != 1) {
 
-            const fundraiser = await ethers.getContractAt("USDCFundraiser", fundraiserAddress);
+            //const fundraiser = await ethers.getContractAt("USDCFundraiser", fundraiserAddress);
 
             // const tx = await fundraiser.connect(deployer).updateFeePercentage(10);
             // await tx.wait();
@@ -184,94 +184,94 @@ async function main() {
             //const fundraiserAddress = await fundraiser.getAddress();
             // After deployment, fund with LINK and register
                 
-            const linkToken = await ethers.getContractAt("IERC20", LINK_TOKEN);
+            //const linkToken = await ethers.getContractAt("IERC20", LINK_TOKEN);
 
-            try {
+            //try {
                 // Check LINK balance
-                const linkBalance = await linkToken.balanceOf(deployer.address);
-                console.log("Deployer LINK balance:", ethers.formatEther(linkBalance));
+                //const linkBalance = await linkToken.balanceOf(deployer.address);
+                //console.log("Deployer LINK balance:", ethers.formatEther(linkBalance));
 
-                if (linkBalance < ethers.parseEther("1")) {
-                    throw new Error("Insufficient LINK tokens. Get some from https://faucets.chain.link/fuji");
-                }
+                //if (linkBalance < ethers.parseEther("1")) {
+                //    throw new Error("Insufficient LINK tokens. Get some from https://faucets.chain.link/fuji");
+                //}
 
                 // Transfer LINK to contract
-                console.log("Transferring LINK to contract...");
-                const transferTx = await linkToken.transfer(
-                    await fundraiser.getAddress(),
-                    ethers.parseEther("1")
-                );
-                await transferTx.wait();
+                //console.log("Transferring LINK to contract...");
+                //const transferTx = await linkToken.transfer(
+                //    await fundraiser.getAddress(),
+                //    ethers.parseEther("1")
+                //);
+                //await transferTx.wait();
                 
                 // Verify LINK transfer
-                const contractLinkBalance = await linkToken.balanceOf(await fundraiser.getAddress());
-                console.log("Contract LINK balance:", ethers.formatEther(contractLinkBalance));
+                //const contractLinkBalance = await linkToken.balanceOf(await fundraiser.getAddress());
+                //console.log("Contract LINK balance:", ethers.formatEther(contractLinkBalance));
 
                 // Register with Chainlink
-                console.log("Registering with Chainlink...");
-                const fundraiserAddress = await fundraiser.getAddress();
-                console.log("Fundraiser address:", fundraiserAddress);
-                console.log("Deployer address:", deployer.address);
-                try {
-                    const registrationParams = ethers.AbiCoder.defaultAbiCoder().encode(
-                        ["tuple(string,bytes,address,uint32,address,uint8,bytes,bytes,bytes,uint96)"],
-                        [
-                            [
-                                "testing",
-                                "0x",
-                                fundraiserAddress,
-                                300000,
-                                deployer.address,
-                                0,
-                                "0x",
-                                "0x",
-                                "0x",
-                                1000000000000000000n // 1 LINK
-                            ],
-                        ],
-                    )
-                    const estimatedGas = await fundraiser.initializeChainlink.estimateGas(
-                        registrationParams
-                    );
-                    const gasLimit = estimatedGas * 105n / 100n;
-                    console.log("Estimated gas:", estimatedGas);
-                    console.log("Gas limit:", gasLimit);
-                    const tx = await fundraiser.initializeChainlink(
-                        registrationParams,
-                        {
-                            gasLimit: gasLimit
-                        }
-                    )
-                    console.log("Registration tx sent:", tx.hash);
+                //console.log("Registering with Chainlink...");
+                //const fundraiserAddress = await fundraiser.getAddress();
+                //console.log("Fundraiser address:", fundraiserAddress);
+                //console.log("Deployer address:", deployer.address);
+                //try {
+                //    const registrationParams = ethers.AbiCoder.defaultAbiCoder().encode(
+                //            ["tuple(string,bytes,address,uint32,address,uint8,bytes,bytes,bytes,uint96)"],
+                //            [
+                //                [
+                //                    "testing",
+                //                    "0x",
+                //               fundraiserAddress,
+                //               300000,
+                //               deployer.address,
+                //               0,
+                //               "0x",
+                //               "0x",
+                //               "0x",
+                //               1000000000000000000n // 1 LINK
+                //            ],
+                //        ],
+                //    )
+                    //const estimatedGas = await fundraiser.initializeChainlink.estimateGas(
+                    //    registrationParams
+                    //);
+                    //const gasLimit = estimatedGas * 105n / 100n;
+                    //console.log("Estimated gas:", estimatedGas);
+                    //console.log("Gas limit:", gasLimit);
+                    //const tx = await fundraiser.initializeChainlink(
+                    //    registrationParams,
+                    //    {
+                    //        gasLimit: gasLimit
+                    //    }
+                    //)
+                    //console.log("Registration tx sent:", tx.hash);
                     
-                    const receipt = await tx.wait(2);
-                    console.log("Transaction status:", receipt?.status);
-                    console.log("Upkeep ID:", await fundraiser.getStationUpkeepID());
+                    //const receipt = await tx.wait(2);
+                    //console.log("Transaction status:", receipt?.status);
+                    //console.log("Upkeep ID:", await fundraiser.getStationUpkeepID());
                     // Check for events
-                    if (receipt?.logs) {
-                        for (const log of receipt.logs) {
-                            try {
-                                const decodedLog = fundraiser.interface.parseLog(log);
-                                if (decodedLog) {
-                                    console.log("Event:", decodedLog.name, decodedLog.args);
-                                }
-                            } catch (e) {
-                                // Skip logs that can't be decoded
-                            }
-                        }
-                    }
-                } catch (error: any) {
-                    console.error("Registration failed:", error.message);
-                    throw error;
-                }
+                //     if (receipt?.logs) {
+                //         for (const log of receipt.logs) {
+                //             try {
+                //                 const decodedLog = fundraiser.interface.parseLog(log);
+                //                 if (decodedLog) {
+                //                     console.log("Event:", decodedLog.name, decodedLog.args);
+                //                 }
+                //             } catch (e) {
+                //                 // Skip logs that can't be decoded
+                //             }
+                //         }
+                //     }
+                // } catch (error: any) {
+                //     console.error("Registration failed:", error.message);
+                //     throw error;
+                // }
 
-            } catch (error) {
-                console.error("Error during deployment:", error);
-                throw error;
-            }
-        } else {
-            console.log("Funding Type is limitless, skipping LINK transfer and Chainlink registration");
-        }
+            // } catch (error) {
+            //     console.error("Error during deployment:", error);
+            //     throw error;
+            //}
+        // } else {
+        //     console.log("Funding Type is limitless, skipping LINK transfer and Chainlink registration");
+        // }
 
     } catch (error) {
         console.error(error);

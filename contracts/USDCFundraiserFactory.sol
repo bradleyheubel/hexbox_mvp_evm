@@ -8,10 +8,10 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract USDCFundraiserFactory is Ownable {
     address public usdcAddress;
     address public productTokenAddress;
-    address public linkToken;
-    address public chainlinkRegistrar;
-    address public chainlinkRegistry;
-    bytes4 public chainlinkRegistrarSelector;
+    // address public linkToken;
+    // address public chainlinkRegistrar;
+    // address public chainlinkRegistry;
+    // bytes4 public chainlinkRegistrarSelector;
     uint256 public defaultFeePercentage;
     address public feeWallet;
     event FundraiserCreated(address indexed fundraiser, address indexed creator);
@@ -20,19 +20,19 @@ contract USDCFundraiserFactory is Ownable {
     constructor(
         address _usdcAddress,
         address _productTokenAddress,
-        address _linkToken,
-        address _chainlinkRegistrar,
-        address _chainlinkRegistry,
-        bytes4 _chainlinkRegistrarSelector,
+        // address _linkToken,
+        // address _chainlinkRegistrar,
+        // address _chainlinkRegistry,
+        // bytes4 _chainlinkRegistrarSelector,
         uint256 _defaultFeePercentage,
         address _feeWallet
     ) Ownable(msg.sender) {
         usdcAddress = _usdcAddress;
         productTokenAddress = _productTokenAddress;
-        linkToken = _linkToken;
-        chainlinkRegistrar = _chainlinkRegistrar;
-        chainlinkRegistry = _chainlinkRegistry;
-        chainlinkRegistrarSelector = _chainlinkRegistrarSelector;
+        // linkToken = _linkToken;
+        // chainlinkRegistrar = _chainlinkRegistrar;
+        // chainlinkRegistry = _chainlinkRegistry;
+        // chainlinkRegistrarSelector = _chainlinkRegistrarSelector;
         defaultFeePercentage = _defaultFeePercentage;
         feeWallet = _feeWallet;
     }
@@ -60,10 +60,10 @@ contract USDCFundraiserFactory is Ownable {
             deadline,
             productTokenAddress,
             products,
-            linkToken,
-            chainlinkRegistrar,
-            chainlinkRegistry,
-            chainlinkRegistrarSelector,
+            // linkToken,
+            // chainlinkRegistrar,
+            // chainlinkRegistry,
+            // chainlinkRegistrarSelector,
             campaignAdmin
         );
 

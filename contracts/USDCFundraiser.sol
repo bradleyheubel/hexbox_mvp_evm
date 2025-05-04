@@ -7,9 +7,9 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import "./ProductToken.sol";
-import {IAutomationRegistryConsumer} from
-    "@chainlink/contracts/src/v0.8/automation/interfaces/IAutomationRegistryConsumer.sol";
-import {IAutomationForwarder} from "@chainlink/contracts/src/v0.8/automation/interfaces/IAutomationForwarder.sol";
+// import {IAutomationRegistryConsumer} from
+//     "@chainlink/contracts/src/v0.8/automation/interfaces/IAutomationRegistryConsumer.sol";
+// import {IAutomationForwarder} from "@chainlink/contracts/src/v0.8/automation/interfaces/IAutomationForwarder.sol";
 
 struct ProductConfig {
     uint256 productId;
@@ -80,9 +80,9 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
     event ProductPriceSet(uint256 productId, uint256 price);
     event Debug(string message, uint256 value);
     event DebugBytes(string message, bytes value);
-    event ForwarderChanged(address indexed forwarder);
-    event UpkeepPerformed();
-    event UpkeepRegistered(uint256 upkeepID);
+    // event ForwarderChanged(address indexed forwarder);
+    // event UpkeepPerformed();
+    // event UpkeepRegistered(uint256 upkeepID);
     event Finalized();
     event ProductAdded(uint256 productId, uint256 price, uint256 supplyLimit);
     event ProductRemoved(uint256 productId);
