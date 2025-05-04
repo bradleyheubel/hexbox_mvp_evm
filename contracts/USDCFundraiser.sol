@@ -17,7 +17,7 @@ struct ProductConfig {
     uint256 supplyLimit;  // 0 means unlimited supply
 }
 
-contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompatibleInterface {
+contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCompatibleInterface {
     IERC20 public usdc;
     ProductToken public productToken;
     address public beneficiaryWallet;
@@ -34,15 +34,15 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     uint256[] public productIds;
     mapping(uint256 => uint256) public productSoldCount;    // productId => current sold count
 
-    address CHAINLINK_REGISTRAR;
-    address CHAINLINK_REGISTRY;
-    address LINK_TOKEN;
-    bytes4 CHAINLINK_REGISTRAR_SELECTOR;
-    bool isRegisteredWithChainlink;
+    // address CHAINLINK_REGISTRAR;
+    // address CHAINLINK_REGISTRY;
+    // address LINK_TOKEN;
+    // bytes4 CHAINLINK_REGISTRAR_SELECTOR;
+    // bool isRegisteredWithChainlink;
 
-    uint256 s_stationUpkeepID;
-    IAutomationForwarder s_forwarder;
-    bytes4 s_registerUpkeepSelector;
+    // uint256 s_stationUpkeepID;
+    // IAutomationForwarder s_forwarder;
+    // bytes4 s_registerUpkeepSelector;
 
     uint256 public fundingType; // 0 = all or nothing, 1 = limitless, 2 = flexible
 
@@ -55,9 +55,9 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         _;
     }
 
-    function getStationUpkeepID() public view returns (uint256) {
-        return s_stationUpkeepID;
-    }
+    // function getStationUpkeepID() public view returns (uint256) {
+    //     return s_stationUpkeepID;
+    // }
 
     struct RegistrationParams {
         string name;
@@ -98,10 +98,10 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         uint256 _deadline,
         address _productTokenAddress,
         ProductConfig[] memory _products,
-        address _linkToken,
-        address _chainlinkRegistrar,
-        address _chainlinkRegistry,
-        bytes4 _chainlinkRegistrarSelector,
+        // address _linkToken,
+        // address _chainlinkRegistrar,
+        // address _chainlinkRegistry,
+        // bytes4 _chainlinkRegistrarSelector,
         address _campaignAdmin
     ) Ownable(msg.sender) {
         require(_usdcAddress != address(0), "Invalid USDC address");
@@ -129,10 +129,10 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
             emit ProductPriceSet(_products[i].productId, _products[i].price);
         }
 
-        LINK_TOKEN = _linkToken;
-        CHAINLINK_REGISTRAR = _chainlinkRegistrar;
-        CHAINLINK_REGISTRY = _chainlinkRegistry;
-        CHAINLINK_REGISTRAR_SELECTOR = _chainlinkRegistrarSelector;
+        // LINK_TOKEN = _linkToken;
+        // CHAINLINK_REGISTRAR = _chainlinkRegistrar;
+        // CHAINLINK_REGISTRY = _chainlinkRegistry;
+        // CHAINLINK_REGISTRAR_SELECTOR = _chainlinkRegistrarSelector;
 
         require(_fundingType <= 2, "Invalid funding type");
         fundingType = _fundingType;
@@ -276,9 +276,9 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         emit Refund(msg.sender, refundAmount, productId, quantity);
     }
 
-    function _getStationUpkeepRegistry() internal view returns (IAutomationRegistryConsumer registry) {
-        return s_forwarder.getRegistry();
-    }
+    // function _getStationUpkeepRegistry() internal view returns (IAutomationRegistryConsumer registry) {
+    //     return s_forwarder.getRegistry();
+    // }
 
     // function _withdrawLink() internal {
     //     IAutomationRegistryConsumer registry = _getStationUpkeepRegistry();
@@ -286,59 +286,59 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
     // }
 
     // Add checkUpkeep function
-    function checkUpkeep(bytes calldata /* checkData */) 
-        external 
-        view 
-        override 
-        returns (bool upkeepNeeded, bytes memory /* performData */) 
-    {
-        upkeepNeeded = !finalized && block.timestamp > deadline;
-        return (upkeepNeeded, "");
-    }
+    // function checkUpkeep(bytes calldata /* checkData */) 
+    //     external 
+    //     view 
+    //     override 
+    //     returns (bool upkeepNeeded, bytes memory /* performData */) 
+    // {
+    //     upkeepNeeded = !finalized && block.timestamp > deadline;
+    //     return (upkeepNeeded, "");
+    // }
 
-    // Add performUpkeep function
-    function performUpkeep(bytes calldata /* performData */) external override {
-        if (!finalized && block.timestamp > deadline) {
-            finalize();
-            emit UpkeepPerformed();
-        }
-    }
+    // // Add performUpkeep function
+    // function performUpkeep(bytes calldata /* performData */) external override {
+    //     if (!finalized && block.timestamp > deadline) {
+    //         finalize();
+    //         emit UpkeepPerformed();
+    //     }
+    // }
 
-    function initializeChainlink(bytes calldata registrationParams)
-        external
-        onlyOwner
-        returns (uint256 stationUpkeepID)
-    {
-        bool approveSuccess = IERC20(LINK_TOKEN).approve(CHAINLINK_REGISTRAR, 1 ether);
-        require(approveSuccess, "LINK approval failed");
+    // function initializeChainlink(bytes calldata registrationParams)
+    //     external
+    //     onlyOwner
+    //     returns (uint256 stationUpkeepID)
+    // {
+    //     bool approveSuccess = IERC20(LINK_TOKEN).approve(CHAINLINK_REGISTRAR, 1 ether);
+    //     require(approveSuccess, "LINK approval failed");
 
-        stationUpkeepID = _registerUpkeep(CHAINLINK_REGISTRAR, CHAINLINK_REGISTRAR_SELECTOR, registrationParams);
-        s_stationUpkeepID = stationUpkeepID;
-        isRegisteredWithChainlink = true;
-        emit UpkeepRegistered(stationUpkeepID);
+    //     stationUpkeepID = _registerUpkeep(CHAINLINK_REGISTRAR, CHAINLINK_REGISTRAR_SELECTOR, registrationParams);
+    //     s_stationUpkeepID = stationUpkeepID;
+    //     isRegisteredWithChainlink = true;
+    //     emit UpkeepRegistered(stationUpkeepID);
 
-        if (CHAINLINK_REGISTRY != address(0)) {
-            (bool success, bytes memory returnData) =
-                CHAINLINK_REGISTRY.staticcall(abi.encodeWithSignature("getForwarder(uint256)", stationUpkeepID));
-            if (success) {
-                address forwarder = abi.decode(returnData, (address));
-                s_forwarder = IAutomationForwarder(forwarder);
-                emit ForwarderChanged(forwarder);
-            }
-        }
-    }
+    //     if (CHAINLINK_REGISTRY != address(0)) {
+    //         (bool success, bytes memory returnData) =
+    //             CHAINLINK_REGISTRY.staticcall(abi.encodeWithSignature("getForwarder(uint256)", stationUpkeepID));
+    //         if (success) {
+    //             address forwarder = abi.decode(returnData, (address));
+    //             s_forwarder = IAutomationForwarder(forwarder);
+    //             emit ForwarderChanged(forwarder);
+    //         }
+    //     }
+    // }
 
-    function _registerUpkeep(address registrar, bytes4 selector, bytes calldata registrationParams) internal returns (uint256 upkeepID) {
-        (bool success, bytes memory returnData) =
-            registrar.call(bytes.concat(selector, registrationParams));
-        if (!success) {
-            emit Debug("Registration failed", returnData.length);
-            if (returnData.length > 0) {    
-                emit DebugBytes("Registration data", returnData);
-            }
-        }
-        return abi.decode(returnData, (uint256));
-    }
+    // function _registerUpkeep(address registrar, bytes4 selector, bytes calldata registrationParams) internal returns (uint256 upkeepID) {
+    //     (bool success, bytes memory returnData) =
+    //         registrar.call(bytes.concat(selector, registrationParams));
+    //     if (!success) {
+    //         emit Debug("Registration failed", returnData.length);
+    //         if (returnData.length > 0) {    
+    //             emit DebugBytes("Registration data", returnData);
+    //         }
+    //     }
+    //     return abi.decode(returnData, (uint256));
+    // }
 
     function addProduct(ProductConfig memory product) external onlyAdminOrOwner {
         require(product.price > 0, "Invalid price");
