@@ -142,6 +142,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
 
     function deposit(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
         ProductConfig memory product = products[productId];
+        require(finalized == false, "Campaign is finalized");
         require(product.price > 0, "Product not available");
         
         if(product.supplyLimit > 0) {
@@ -185,14 +186,20 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard, AutomationCompati
         if (fundingType == 0) {
             require(block.timestamp > deadline, "Deadline not reached");
             if (totalRaised >= minimumTarget) {
-                _releaseFunds();
+                if (totalRaised > 0) {
+                    _releaseFunds();
+                }
             }
         } else if (fundingType == 1) {
             require(msg.sender == owner(), "Only owner can finalize limitless funding");
-            _releaseFunds();
+            if (totalRaised > 0) {
+                _releaseFunds();
+            }
         } else if (fundingType == 2) {
             require(block.timestamp > deadline, "Deadline not reached");
-            _releaseFunds();
+            if (totalRaised > 0) {
+                _releaseFunds();
+            }
         }
         
         finalized = true;
