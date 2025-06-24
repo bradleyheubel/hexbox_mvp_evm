@@ -5,8 +5,10 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import "./ProductToken.sol";
+
 // import {IAutomationRegistryConsumer} from
 //     "@chainlink/contracts/src/v0.8/automation/interfaces/IAutomationRegistryConsumer.sol";
 // import {IAutomationForwarder} from "@chainlink/contracts/src/v0.8/automation/interfaces/IAutomationForwarder.sol";
@@ -18,6 +20,9 @@ struct ProductConfig {
 }
 
 contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCompatibleInterface {
+    using SafeERC20 for IERC20;
+    
+    uint256 public constant BASIS_POINTS = 10000; // 100% = 10000 basis points
     IERC20 public usdc;
     ProductToken public productToken;
     address public beneficiaryWallet;
@@ -109,7 +114,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
         require(_feeWallet != address(0), "Invalid fee wallet");
         require(_products.length > 0, "No products provided");
         require(_campaignAdmin != address(0), "Invalid campaign admin");
-        
+        require(_feePercentage < BASIS_POINTS, "Fee percentage must be less than 100%")
         usdc = IERC20(_usdcAddress);
         beneficiaryWallet = _beneficiaryWallet;
         feeWallet = _feeWallet;
@@ -150,16 +155,11 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
         }
         
         uint256 totalAmount = product.price * quantity;
-        uint256 fee = (totalAmount * feePercentage) / 10000;
+        uint256 fee = (totalAmount * feePercentage) / BASIS_POINTS;
         uint256 netAmount = totalAmount - fee;
 
         // Transfer USDC first
-        require(usdc.transferFrom(msg.sender, address(this), totalAmount), "Transfer failed");
-        
-        // Handle fee transfer
-        if (fee > 0) {
-            require(usdc.transfer(feeWallet, fee), "Fee transfer failed");
-        }
+        usdc.safeTransferFrom(msg.sender, address(this), totalAmount);
 
         // Try to mint NFT before updating state
         try productToken.mint(msg.sender, productId, quantity) {
@@ -167,15 +167,20 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
             totalRaised += netAmount;
             tokenDeposits[productId] += netAmount;
             productSoldCount[productId] += quantity;
+
+            // Handle fee transfer
+            if (fee > 0) {
+                usdc.safeTransfer(feeWallet, fee);
+            }
             
             emit Deposit(msg.sender, totalAmount, fee);
         } catch Error(string memory reason) {
             // Revert the USDC transfer if mint fails
-            require(usdc.transfer(msg.sender, totalAmount), "Refund failed after mint error");
+            usdc.safeTransfer(msg.sender, totalAmount);
             revert(string.concat("NFT mint failed: ", reason));
         } catch (bytes memory /*lowLevelData*/) {
             // Handle low-level errors
-            require(usdc.transfer(msg.sender, totalAmount), "Refund failed after mint error");
+            usdc.safeTransfer(msg.sender, totalAmount);
             revert("NFT mint failed with low-level error");
         }
     }
@@ -209,7 +214,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
     function _releaseFunds() private {
         uint256 contractBalance = usdc.balanceOf(address(this));
         require(contractBalance > 0, "No funds to release");
-        require(usdc.transfer(beneficiaryWallet, contractBalance), "Transfer failed");
+        usdc.safeTransfer(beneficiaryWallet, contractBalance);
         emit FundsReleased(beneficiaryWallet, contractBalance);
     }
 
@@ -224,17 +229,17 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
     function emergencyWithdraw(address to, uint256 amount) external onlyOwner {
         require(to != address(0), "Invalid address");
         require(amount <= usdc.balanceOf(address(this)), "Insufficient balance");
-        require(usdc.transfer(to, amount), "Transfer failed");
+        usdc.safeTransfer(to, amount);
         emit EmergencyWithdraw(to, amount);
     }
 
-    // Only for testing
-    function updateDeadline(uint256 newDeadline) external onlyOwner {
-        require(!finalized, "Fundraiser is finalized");
-        require(fundingType != 1, "Limitless funding doesn't support finalization");
-        require(newDeadline > block.timestamp, "Deadline must be in the future");
-        deadline = newDeadline;
-    }
+    // // Only for testing
+    // function updateDeadline(uint256 newDeadline) external onlyOwner {
+    //     require(!finalized, "Fundraiser is finalized");
+    //     require(fundingType != 1, "Limitless funding doesn't support finalization");
+    //     require(newDeadline > block.timestamp, "Deadline must be in the future");
+    //     deadline = newDeadline;
+    // }
 
     function getProductIds() public view returns (uint256[] memory) {
         return productIds;
@@ -247,7 +252,7 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
         emit ProductPriceSet(productId, price);
     }
 
-    function claimRefund(uint256 productId, uint256 quantity) external {
+    function claimRefund(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
         ProductConfig memory product = products[productId];
         require(product.price > 0, "Invalid product");
         
@@ -260,19 +265,19 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
         uint256 balance = productToken.balanceOf(msg.sender, productId);
         require(balance > 0, "No tokens to refund");
         require(balance >= quantity, "Insufficient tokens to refund");
-        uint256 fee = (product.price * feePercentage) / 10000;
+        uint256 fee = (product.price * feePercentage) / BASIS_POINTS;
         uint256 refundAmount = (product.price - fee) * quantity;
-        
-        // Burn the NFTs first
-        productToken.burn(msg.sender, productId, quantity);
 
         // Update supply count
         productSoldCount[productId] -= quantity;
-        
+        tokenDeposits[productId] -= refundAmount;
         totalRaised -= refundAmount;
+
+        // Burn the NFTs
+        productToken.burn(msg.sender, productId, quantity);
         
         // Then send the refund
-        require(usdc.transfer(msg.sender, refundAmount), "Refund failed");
+        usdc.safeTransfer(msg.sender, refundAmount);
         emit Refund(msg.sender, refundAmount, productId, quantity);
     }
 
@@ -368,13 +373,13 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
         emit ProductRemoved(productId);
     }
 
-    function updateProductPrice(uint256 productId, uint256 price) external onlyAdminOrOwner {
-        require(price > 0, "Invalid price");
-        require(products[productId].price > 0, "Product does not exist");
+    // function updateProductPrice(uint256 productId, uint256 price) external onlyAdminOrOwner {
+    //     require(price > 0, "Invalid price");
+    //     require(products[productId].price > 0, "Product does not exist");
 
-        products[productId].price = price;
-        emit ProductUpdated(productId, price, products[productId].supplyLimit);
-    }
+    //     products[productId].price = price;
+    //     emit ProductUpdated(productId, price, products[productId].supplyLimit);
+    // }
 
     function updateProductSupply(uint256 productId, uint256 supplyLimit) external onlyAdminOrOwner {
         require(products[productId].price > 0, "Product does not exist");
