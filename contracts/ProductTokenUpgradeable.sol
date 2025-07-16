@@ -1,19 +1,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
 /**
- * @title ProductToken
- * @dev Implementation of an ERC1155 token for products with role-based access control
+ * @title ProductTokenUpgradeable
+ * @dev Upgradeable implementation of an ERC1155 token for products with role-based access control
  */
-contract ProductToken is ERC1155, AccessControl {
+contract ProductTokenUpgradeable is 
+    Initializable, 
+    ERC1155Upgradeable, 
+    AccessControlUpgradeable,
+    UUPSUpgradeable
+{
     using Strings for uint256;
     
     // Role definition
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     
     // Mapping to track total supply per token ID
     mapping(uint256 => uint256) private _productSupply;
@@ -32,14 +40,24 @@ contract ProductToken is ERC1155, AccessControl {
     event BaseURIUpdated(string newUri);
     event ProductBurned(address indexed from, uint256 indexed productId, uint256 amount);
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
     /**
-     * @dev Constructor sets up base URI and grants DEFAULT_ADMIN_ROLE and MINTER_ROLE to the deployer
+     * @dev Initializer replaces the constructor for upgradeable contracts
      * @param baseUri Initial base URI for token metadata
      */
-    constructor(string memory baseUri) ERC1155("") {
+    function initialize(string memory baseUri) public initializer {
+        __ERC1155_init("");
+        __AccessControl_init();
+        __UUPSUpgradeable_init();
+
         _baseUri = baseUri;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
+        _grantRole(UPGRADER_ROLE, msg.sender);
     }
 
     /**
@@ -145,32 +163,15 @@ contract ProductToken is ERC1155, AccessControl {
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC1155, AccessControl)
+        override(ERC1155Upgradeable, AccessControlUpgradeable)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
     }
     
     /**
-     * @dev Override the ERC1155 _burn function to update product supply tracking
-     * @param from Address which owns the tokens to be burned
-     * @param id ID of the token type to burn
-     * @param amount Amount of tokens to burn
-     * @notice This ensures product supply tracking is maintained even when tokens are burned through other methods
-     * @notice Only updates _productSupply for product IDs that exist in our tracking system
+     * @dev Function that should revert when msg.sender is not authorized to upgrade the contract
+     * @param newImplementation Address of the new implementation
      */
-    // Custom burn implementation - not overriding ERC1155 _burn
-    function _burnProduct(
-        address from,
-        uint256 id,
-        uint256 amount
-    ) internal virtual {
-        // Only update _productSupply if this is a tracked product
-        if (_productIdExists[id]) {
-            _productSupply[id] -= amount;
-        }
-        
-        // Call the parent implementation
-        super._burn(from, id, amount);
-    }
-} 
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
+}

@@ -18,8 +18,8 @@ async function main() {
         // console.log("ProductToken deployed to:", await deployedProductToken.getAddress());
 
         // Reference ProductToken
-        const PRODUCT_TOKEN_ADDRESS = "0x49216924D47184954e25940a6352abc4b03AbAeD" //await deployedProductToken.getAddress();
-        const productToken = await ethers.getContractAt("ProductToken", PRODUCT_TOKEN_ADDRESS) as ProductToken;
+        const PRODUCT_TOKEN_ADDRESS = "0xC0095941F79c6C44f6Bbb4Fe92E9612B5f1aD80a" //await deployedProductToken.getAddress();
+        const productToken = await ethers.getContractAt("ProductTokenUpgradeable", PRODUCT_TOKEN_ADDRESS) as ProductToken;
 
         const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
         // const LINK_TOKEN = "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846";
@@ -30,24 +30,24 @@ async function main() {
         const FEE_WALLET = "0xB60c975cC83168C298EfE5334A110DA33618B48d";
 
         // Deploy USDCFundraiserFactory
-        console.log("\nDeploying USDCFundraiserFactory...");
-        const USDCFundraiserFactory = await ethers.getContractFactory("USDCFundraiserFactory");
+        // console.log("\nDeploying USDCFundraiserFactory...");
+        // const USDCFundraiserFactory = await ethers.getContractFactory("USDCFundraiserFactory");
         
-        const deployedFactory = await USDCFundraiserFactory.deploy(
-            FUJI_USDC,
-            PRODUCT_TOKEN_ADDRESS,
-            // LINK_TOKEN,
-            // CHAINLINK_REGISTRAR,
-            // CHAINLINK_REGISTRY,
-            // REGISTER_UPKEEP_SELECTOR,
-            DEFAULT_FEE_PERCENTAGE,
-            FEE_WALLET
-        );
-        await deployedFactory.waitForDeployment();
-        console.log("USDCFundraiserFactory deployed to:", await deployedFactory.getAddress());
+        // const deployedFactory = await USDCFundraiserFactory.deploy(
+        //     FUJI_USDC,
+        //     PRODUCT_TOKEN_ADDRESS,
+        //     // LINK_TOKEN,
+        //     // CHAINLINK_REGISTRAR,
+        //     // CHAINLINK_REGISTRY,
+        //     // REGISTER_UPKEEP_SELECTOR,
+        //     DEFAULT_FEE_PERCENTAGE,
+        //     FEE_WALLET
+        // );
+        // await deployedFactory.waitForDeployment();
+        // console.log("USDCFundraiserFactory deployed to:", await deployedFactory.getAddress());
 
-        const FACTORY_ADDRESS = await deployedFactory.getAddress(); //"0x2BC4F4757c5dDd37409B5d3D90811BBb652a96C4"; //"0x36e68c8910d424730d96f5C405371fAb86bB5682";
-        const factory = await ethers.getContractAt("USDCFundraiserFactory", FACTORY_ADDRESS);
+        const FACTORY_ADDRESS = "0x5a4582cDe5c5DB81C84029f5c340421Bb10B4BE7"; //await deployedFactory.getAddress(); //"0x2BC4F4757c5dDd37409B5d3D90811BBb652a96C4"; //"0x36e68c8910d424730d96f5C405371fAb86bB5682";
+        const factory = await ethers.getContractAt("USDCFundraiserFactoryUpgradeableV2", FACTORY_ADDRESS);
 
         // Deploy USDCFundraiser
         console.log("\nDeploying USDCFundraiser...");

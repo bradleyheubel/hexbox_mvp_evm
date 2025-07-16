@@ -1,0 +1,19 @@
+{
+  "network": "fuji",
+  "timestamp": "2025-07-15T04:24:18.199Z",
+  "deployer": "0x669aA5fca5B9c19F0869e5Be17915fc9B87Ea41E",
+  "addresses": {
+    "fundraiserImplementation": "0x6ad9D2375419Da86A5c16B4626ec3dD21418c136",
+    "factoryProxy": "0x5a4582cDe5c5DB81C84029f5c340421Bb10B4BE7",
+    "factoryImplementation": "0x9bA599ccD91E3541d8D915a98688217915A363A0",
+    "productTokenProxy": "0xC0095941F79c6C44f6Bbb4Fe92E9612B5f1aD80a",
+    "productTokenImplementation": "0x61f1887324B3C94eAa8A742cFDEF021Af1Cc9716"
+  },
+  "config": {
+    "usdcAddress": "0x5425890298aed601595a70AB815c96711a31Bc65",
+    "productTokenAddress": "0x49216924D47184954e25940a6352abc4b03AbAeD",
+    "defaultFeePercentage": 250,
+    "feeWallet": "0xB60c975cC83168C298EfE5334A110DA33618B48d",
+    "baseUri": "https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/products_metadata/"
+  }
+}

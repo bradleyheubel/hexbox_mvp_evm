@@ -2,16 +2,13 @@
 pragma solidity ^0.8.27;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 import "./ProductToken.sol";
-
-// import {IAutomationRegistryConsumer} from
-//     "@chainlink/contracts/src/v0.8/automation/interfaces/IAutomationRegistryConsumer.sol";
-// import {IAutomationForwarder} from "@chainlink/contracts/src/v0.8/automation/interfaces/IAutomationForwarder.sol";
 
 struct ProductConfig {
     uint256 productId;
@@ -19,7 +16,7 @@ struct ProductConfig {
     uint256 supplyLimit;  // 0 means unlimited supply
 }
 
-contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCompatibleInterface {
+contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
     
     uint256 public constant BASIS_POINTS = 10000; // 100% = 10000 basis points
@@ -31,38 +28,20 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
     uint256 public deadline;
     uint256 public feePercentage; // Stored as basis points (e.g., 250 = 2.5%)
     
-    //mapping(address => uint256) public deposits;
     uint256 public totalRaised;
     bool public finalized;
-    //uint256 private currentTokenId;
     mapping(uint256 => uint256) public tokenDeposits; // tokenId => deposit amount
     uint256[] public productIds;
     mapping(uint256 => uint256) public productSoldCount;    // productId => current sold count
 
-    // address CHAINLINK_REGISTRAR;
-    // address CHAINLINK_REGISTRY;
-    // address LINK_TOKEN;
-    // bytes4 CHAINLINK_REGISTRAR_SELECTOR;
-    // bool isRegisteredWithChainlink;
-
-    // uint256 s_stationUpkeepID;
-    // IAutomationForwarder s_forwarder;
-    // bytes4 s_registerUpkeepSelector;
-
     uint256 public fundingType; // 0 = all or nothing, 1 = limitless, 2 = flexible
-
     mapping(uint256 => ProductConfig) public products;
-
     address public campaignAdmin;
 
     modifier onlyAdminOrOwner() {
         require(msg.sender == owner() || msg.sender == campaignAdmin, "Not authorized");
         _;
     }
-
-    // function getStationUpkeepID() public view returns (uint256) {
-    //     return s_stationUpkeepID;
-    // }
 
     struct RegistrationParams {
         string name;
@@ -85,15 +64,17 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
     event ProductPriceSet(uint256 productId, uint256 price);
     event Debug(string message, uint256 value);
     event DebugBytes(string message, bytes value);
-    // event ForwarderChanged(address indexed forwarder);
-    // event UpkeepPerformed();
-    // event UpkeepRegistered(uint256 upkeepID);
     event Finalized();
     event ProductAdded(uint256 productId, uint256 price, uint256 supplyLimit);
     event ProductRemoved(uint256 productId);
     event ProductUpdated(uint256 productId, uint256 price, uint256 supplyLimit);
     
-    constructor(
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(
         address _usdcAddress,
         address _beneficiaryWallet,
         address _feeWallet,
@@ -103,77 +84,72 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
         uint256 _deadline,
         address _productTokenAddress,
         ProductConfig[] memory _products,
-        // address _linkToken,
-        // address _chainlinkRegistrar,
-        // address _chainlinkRegistry,
-        // bytes4 _chainlinkRegistrarSelector,
-        address _campaignAdmin
-    ) Ownable(msg.sender) {
+        address _campaignAdmin,
+        address _owner
+    ) public initializer {
+        __Ownable_init(_owner);
+        __Pausable_init();
+        __ReentrancyGuard_init();
+        
         require(_usdcAddress != address(0), "Invalid USDC address");
         require(_beneficiaryWallet != address(0), "Invalid beneficiary wallet");
         require(_feeWallet != address(0), "Invalid fee wallet");
+        require(_productTokenAddress != address(0), "Invalid product token address");
+        require(_deadline > block.timestamp, "Invalid deadline");
         require(_products.length > 0, "No products provided");
         require(_campaignAdmin != address(0), "Invalid campaign admin");
+        require(_owner != address(0), "Invalid owner");
         require(_feePercentage < BASIS_POINTS, "Fee percentage must be less than 100%");
+
         usdc = IERC20(_usdcAddress);
         beneficiaryWallet = _beneficiaryWallet;
         feeWallet = _feeWallet;
+        feePercentage = _feePercentage;
         minimumTarget = _minimumTarget;
         deadline = _deadline;
-        feePercentage = _feePercentage;
         productToken = ProductToken(_productTokenAddress);
-        
-        // Store product configurations
-        for(uint256 i = 0; i < _products.length; i++) {
-            require(_products[i].price > 0, "Invalid product price");
-            require(_products[i].productId > 0, "Invalid product ID");
-            
-            productIds.push(_products[i].productId);
-            products[_products[i].productId] = _products[i];
-            
-            emit ProductPriceSet(_products[i].productId, _products[i].price);
-        }
+        campaignAdmin = _campaignAdmin;
 
-        // LINK_TOKEN = _linkToken;
-        // CHAINLINK_REGISTRAR = _chainlinkRegistrar;
-        // CHAINLINK_REGISTRY = _chainlinkRegistry;
-        // CHAINLINK_REGISTRAR_SELECTOR = _chainlinkRegistrarSelector;
+        // Initialize products
+        for (uint256 i = 0; i < _products.length; i++) {
+            ProductConfig memory product = _products[i];
+            require(product.price > 0, "Invalid product price");
+            require(product.productId > 0, "Invalid product ID");
+            
+            products[product.productId] = product;
+            productIds.push(product.productId);
+        }
 
         require(_fundingType <= 2, "Invalid funding type");
         fundingType = _fundingType;
-
-        campaignAdmin = _campaignAdmin;
     }
 
     function deposit(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
         ProductConfig memory product = products[productId];
         require(finalized == false, "Campaign is finalized");
-        require(product.price > 0, "Product not available");
+        require(block.timestamp < deadline, "Campaign has ended");
+        require(product.price > 0, "Invalid product");
+        require(quantity > 0, "Invalid quantity");
         
-        if(product.supplyLimit > 0) {
+        // Check supply limit
+        if (product.supplyLimit > 0) {
             require(productSoldCount[productId] + quantity <= product.supplyLimit, "Exceeds supply limit");
         }
-        
-        uint256 totalAmount = product.price * quantity;
-        uint256 fee = (totalAmount * feePercentage) / BASIS_POINTS;
-        uint256 netAmount = totalAmount - fee;
 
-        // Transfer USDC first
+        uint256 totalAmount = product.price * quantity;
+        uint256 feeAmount = (totalAmount * feePercentage) / BASIS_POINTS;
+        uint256 netAmount = totalAmount - feeAmount;
+
+        // Transfer USDC from user to contract
         usdc.safeTransferFrom(msg.sender, address(this), totalAmount);
 
-        // Try to mint NFT before updating state
-        try productToken.mint(msg.sender, productId, quantity) {
-            // Only update state after successful mint
-            totalRaised += netAmount;
-            tokenDeposits[productId] += netAmount;
-            productSoldCount[productId] += quantity;
+        // Update counts and totals
+        productSoldCount[productId] += quantity;
+        totalRaised += netAmount; // Only count net amount toward target
 
-            // Handle fee transfer
-            if (fee > 0) {
-                usdc.safeTransfer(feeWallet, fee);
-            }
-            
-            emit Deposit(msg.sender, totalAmount, fee);
+        // Try to mint NFT - if it fails, revert the entire transaction
+        try productToken.mint(msg.sender, productId, quantity) {
+            // Mint successful - continue
         } catch Error(string memory reason) {
             // Revert the USDC transfer if mint fails
             usdc.safeTransfer(msg.sender, totalAmount);
@@ -183,6 +159,8 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
             usdc.safeTransfer(msg.sender, totalAmount);
             revert("NFT mint failed with low-level error");
         }
+
+        emit Deposit(msg.sender, netAmount, feeAmount);
     }
 
     function finalize() public nonReentrant whenNotPaused {
@@ -190,31 +168,21 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
         
         if (fundingType == 0) {
             require(block.timestamp > deadline, "Deadline not reached");
-            if (totalRaised >= minimumTarget) {
-                if (totalRaised > 0) {
-                    _releaseFunds();
-                }
-            }
+            require(totalRaised >= minimumTarget, "Minimum target not met");
         } else if (fundingType == 1) {
-            require(msg.sender == owner(), "Only owner can finalize limitless funding");
-            if (totalRaised > 0) {
-                _releaseFunds();
-            }
+            require(msg.sender == owner() || msg.sender == campaignAdmin, "Not authorized");
         } else if (fundingType == 2) {
-            require(block.timestamp > deadline, "Deadline not reached");
-            if (totalRaised > 0) {
-                _releaseFunds();
-            }
+            require(block.timestamp > deadline || msg.sender == owner() || msg.sender == campaignAdmin, "Cannot finalize yet");
         }
         
         finalized = true;
-        emit Finalized();
-    }
-
-    function _releaseFunds() private {
+        
         uint256 contractBalance = usdc.balanceOf(address(this));
-        require(contractBalance > 0, "No funds to release");
-        usdc.safeTransfer(beneficiaryWallet, contractBalance);
+        if (contractBalance > 0) {
+            usdc.safeTransfer(beneficiaryWallet, contractBalance);
+        }
+        
+        emit Finalized();
         emit FundsReleased(beneficiaryWallet, contractBalance);
     }
 
@@ -233,19 +201,15 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
         emit EmergencyWithdraw(to, amount);
     }
 
-    // // Only for testing
-    // function updateDeadline(uint256 newDeadline) external onlyOwner {
-    //     require(!finalized, "Fundraiser is finalized");
-    //     require(fundingType != 1, "Limitless funding doesn't support finalization");
-    //     require(newDeadline > block.timestamp, "Deadline must be in the future");
-    //     deadline = newDeadline;
-    // }
-
-    function getProductIds() public view returns (uint256[] memory) {
-        return productIds;
+    function updateFeePercentage(uint256 newFeePercentage) external onlyOwner {
+        require(newFeePercentage < BASIS_POINTS, "Fee percentage must be less than 100%");
+        feePercentage = newFeePercentage;
+        emit FeeUpdated(newFeePercentage);
     }
 
-    function setProductPrice(uint256 productId, uint256 price) external onlyOwner {
+    function setProductPrice(uint256 productId, uint256 price) external onlyAdminOrOwner {
+        require(price > 0, "Invalid price");
+        require(products[productId].price > 0, "Product does not exist");
         require(productSoldCount[productId] == 0, "Product has active sales");
 
         products[productId].price = price;
@@ -257,93 +221,26 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
         require(product.price > 0, "Invalid product");
         
         if (fundingType == 0) {
-            require(!(finalized && totalRaised >= minimumTarget), "Target was met, refunds not available.");
+            require(finalized == false, "Campaign is finalized");
+            require(block.timestamp > deadline && totalRaised < minimumTarget, "Refund not available");
         } else {
-            require(!finalized, "Campaign is finalized, refunds not available.");
+            revert("Refunds not available for this funding type");
         }
-        
+
+        // Burn the NFTs to get refund
         uint256 balance = productToken.balanceOf(msg.sender, productId);
-        require(balance > 0, "No tokens to refund");
-        require(balance >= quantity, "Insufficient tokens to refund");
-        uint256 fee = (product.price * feePercentage) / BASIS_POINTS;
-        uint256 refundAmount = (product.price - fee) * quantity;
-
-        // Update supply count
-        productSoldCount[productId] -= quantity;
-        tokenDeposits[productId] -= refundAmount;
-        totalRaised -= refundAmount;
-
-        // Burn the NFTs
+        require(balance >= quantity, "Insufficient NFT balance");
+        
         productToken.burn(msg.sender, productId, quantity);
         
-        // Then send the refund
+        uint256 refundAmount = product.price * quantity;
         usdc.safeTransfer(msg.sender, refundAmount);
+        
+        productSoldCount[productId] -= quantity;
+        totalRaised -= (refundAmount * (BASIS_POINTS - feePercentage)) / BASIS_POINTS;
+
         emit Refund(msg.sender, refundAmount, productId, quantity);
     }
-
-    // function _getStationUpkeepRegistry() internal view returns (IAutomationRegistryConsumer registry) {
-    //     return s_forwarder.getRegistry();
-    // }
-
-    // function _withdrawLink() internal {
-    //     IAutomationRegistryConsumer registry = _getStationUpkeepRegistry();
-    //     registry.withdrawFunds(s_stationUpkeepID, owner());
-    // }
-
-    // Add checkUpkeep function
-    // function checkUpkeep(bytes calldata /* checkData */) 
-    //     external 
-    //     view 
-    //     override 
-    //     returns (bool upkeepNeeded, bytes memory /* performData */) 
-    // {
-    //     upkeepNeeded = !finalized && block.timestamp > deadline;
-    //     return (upkeepNeeded, "");
-    // }
-
-    // // Add performUpkeep function
-    // function performUpkeep(bytes calldata /* performData */) external override {
-    //     if (!finalized && block.timestamp > deadline) {
-    //         finalize();
-    //         emit UpkeepPerformed();
-    //     }
-    // }
-
-    // function initializeChainlink(bytes calldata registrationParams)
-    //     external
-    //     onlyOwner
-    //     returns (uint256 stationUpkeepID)
-    // {
-    //     bool approveSuccess = IERC20(LINK_TOKEN).approve(CHAINLINK_REGISTRAR, 1 ether);
-    //     require(approveSuccess, "LINK approval failed");
-
-    //     stationUpkeepID = _registerUpkeep(CHAINLINK_REGISTRAR, CHAINLINK_REGISTRAR_SELECTOR, registrationParams);
-    //     s_stationUpkeepID = stationUpkeepID;
-    //     isRegisteredWithChainlink = true;
-    //     emit UpkeepRegistered(stationUpkeepID);
-
-    //     if (CHAINLINK_REGISTRY != address(0)) {
-    //         (bool success, bytes memory returnData) =
-    //             CHAINLINK_REGISTRY.staticcall(abi.encodeWithSignature("getForwarder(uint256)", stationUpkeepID));
-    //         if (success) {
-    //             address forwarder = abi.decode(returnData, (address));
-    //             s_forwarder = IAutomationForwarder(forwarder);
-    //             emit ForwarderChanged(forwarder);
-    //         }
-    //     }
-    // }
-
-    // function _registerUpkeep(address registrar, bytes4 selector, bytes calldata registrationParams) internal returns (uint256 upkeepID) {
-    //     (bool success, bytes memory returnData) =
-    //         registrar.call(bytes.concat(selector, registrationParams));
-    //     if (!success) {
-    //         emit Debug("Registration failed", returnData.length);
-    //         if (returnData.length > 0) {    
-    //             emit DebugBytes("Registration data", returnData);
-    //         }
-    //     }
-    //     return abi.decode(returnData, (uint256));
-    // }
 
     function addProduct(ProductConfig memory product) external onlyAdminOrOwner {
         require(product.price > 0, "Invalid price");
@@ -373,14 +270,6 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
         emit ProductRemoved(productId);
     }
 
-    // function updateProductPrice(uint256 productId, uint256 price) external onlyAdminOrOwner {
-    //     require(price > 0, "Invalid price");
-    //     require(products[productId].price > 0, "Product does not exist");
-
-    //     products[productId].price = price;
-    //     emit ProductUpdated(productId, price, products[productId].supplyLimit);
-    // }
-
     function updateProductSupply(uint256 productId, uint256 supplyLimit) external onlyAdminOrOwner {
         require(products[productId].price > 0, "Product does not exist");
         
@@ -398,4 +287,17 @@ contract USDCFundraiser is Ownable, Pausable, ReentrancyGuard{ // , AutomationCo
         require(newAdmin != address(0), "Invalid admin address");
         campaignAdmin = newAdmin;
     }
-} 
+
+    // View functions
+    function getProductIds() external view returns (uint256[] memory) {
+        return productIds;
+    }
+
+    function getProduct(uint256 productId) external view returns (ProductConfig memory) {
+        return products[productId];
+    }
+
+    function getContractBalance() external view returns (uint256) {
+        return usdc.balanceOf(address(this));
+    }
+}

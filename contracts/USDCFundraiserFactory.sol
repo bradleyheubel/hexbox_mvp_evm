@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract USDCFundraiserFactory is Ownable {
+    uint256 public constant BASIS_POINTS = 10000; // 100% = 10000 basis points
     address public usdcAddress;
     address public productTokenAddress;
     // address public linkToken;
@@ -15,7 +16,7 @@ contract USDCFundraiserFactory is Ownable {
     uint256 public defaultFeePercentage;
     address public feeWallet;
     event FundraiserCreated(address indexed fundraiser, address indexed creator);
-    event Debug(string message);
+    //event Debug(string message);
 
     constructor(
         address _usdcAddress,
@@ -111,10 +112,12 @@ contract USDCFundraiserFactory is Ownable {
     }
 
     function changeDefaultFeePercentage(uint256 newFeePercentage) external onlyOwner {
+        require(newFeePercentage < BASIS_POINTS, "Fee percentage must be less than 100%");
         defaultFeePercentage = newFeePercentage;
     }
 
     function changeFeeWallet(address newFeeWallet) external onlyOwner {
+        require(newFeeWallet != address(0), "Invalid fee wallet");
         feeWallet = newFeeWallet; // Changes Hexbox Fee Wallet
     }
 
