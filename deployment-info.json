@@ -3,7 +3,7 @@
   "timestamp": "2025-07-15T04:24:18.199Z",
   "deployer": "0x669aA5fca5B9c19F0869e5Be17915fc9B87Ea41E",
   "addresses": {
-    "fundraiserImplementation": "0x6ad9D2375419Da86A5c16B4626ec3dD21418c136",
+    "fundraiserImplementation": "0x63FCc23816Af6f6888388a6594532eD2823aF063",
     "factoryProxy": "0x5a4582cDe5c5DB81C84029f5c340421Bb10B4BE7",
     "factoryImplementation": "0x9bA599ccD91E3541d8D915a98688217915A363A0",
     "productTokenProxy": "0xC0095941F79c6C44f6Bbb4Fe92E9612B5f1aD80a",
@@ -15,5 +15,14 @@
     "defaultFeePercentage": 250,
     "feeWallet": "0xB60c975cC83168C298EfE5334A110DA33618B48d",
     "baseUri": "https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/products_metadata/"
-  }
+  },
+  "upgrades": [
+    {
+      "timestamp": "2025-08-30T14:24:47.133Z",
+      "type": "fundraiser-implementation",
+      "oldImplementation": "0x6ad9D2375419Da86A5c16B4626ec3dD21418c136",
+      "newImplementation": "0x63FCc23816Af6f6888388a6594532eD2823aF063",
+      "updateTxHash": "0xac960597bbdb6fa98d91d0d393a32fbbb5a5e0c1f6e5b2ee35381921bc6afbab"
+    }
+  ]
 }

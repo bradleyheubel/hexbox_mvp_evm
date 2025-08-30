@@ -168,22 +168,38 @@ contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, Pausabl
         
         if (fundingType == 0) {
             require(block.timestamp > deadline, "Deadline not reached");
-            require(totalRaised >= minimumTarget, "Minimum target not met");
+            
+            if (totalRaised >= minimumTarget) {
+                // Target met - proceed with finalization and fund release
+                _executeFinalization(true);
+            } else if (totalRaised == 0) {
+                // No funds raised - safe to finalize (nothing to do)
+                _executeFinalization(false);
+            } else {
+                // Funds raised but target not met - cannot finalize
+                revert("Target not met - refunds available instead");
+            }
         } else if (fundingType == 1) {
             require(msg.sender == owner() || msg.sender == campaignAdmin, "Not authorized");
+            _executeFinalization(true);
         } else if (fundingType == 2) {
             require(block.timestamp > deadline || msg.sender == owner() || msg.sender == campaignAdmin, "Cannot finalize yet");
+            _executeFinalization(true);
         }
-        
+    }
+
+    function _executeFinalization(bool releaseFunds) private {
         finalized = true;
         
-        uint256 contractBalance = usdc.balanceOf(address(this));
-        if (contractBalance > 0) {
-            usdc.safeTransfer(beneficiaryWallet, contractBalance);
+        if (releaseFunds) {
+            uint256 contractBalance = usdc.balanceOf(address(this));
+            if (contractBalance > 0) {
+                usdc.safeTransfer(beneficiaryWallet, contractBalance);
+                emit FundsReleased(beneficiaryWallet, contractBalance);
+            }
         }
         
         emit Finalized();
-        emit FundsReleased(beneficiaryWallet, contractBalance);
     }
 
     function pause() external onlyOwner {

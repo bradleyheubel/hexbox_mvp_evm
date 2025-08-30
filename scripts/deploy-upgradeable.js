@@ -6,10 +6,10 @@ async function main() {
     console.log("Account balance:", (await deployer.provider.getBalance(deployer.address)).toString());
 
     // Configuration parameters - UPDATE THESE FOR YOUR DEPLOYMENT
-    const USDC_ADDRESS = "0xA0b86a33E6441b7c18c75A0B2B0A8b4f1b1e4a9D"; // Replace with actual USDC address
-    const PRODUCT_TOKEN_ADDRESS = "0xB1b86a33E6441b7c18c75A0B2B0A8b4f1b1e4a9E"; // Replace with actual ProductToken address
+    const USDC_ADDRESS = "0x5425890298aed601595a70AB815c96711a31Bc65"; // Replace with actual USDC address
+    const PRODUCT_TOKEN_ADDRESS = "0x49216924D47184954e25940a6352abc4b03AbAeD"; // Replace with actual ProductToken address
     const DEFAULT_FEE_PERCENTAGE = 250; // 2.5%
-    const FEE_WALLET = "0xC2c86a33E6441b7c18c75A0B2B0A8b4f1b1e4a9F"; // Replace with actual fee wallet
+    const FEE_WALLET = "0xB60c975cC83168C298EfE5334A110DA33618B48d"; // Replace with actual fee wallet
 
     console.log("\n=== Deploying USDCFundraiserUpgradeable Implementation ===");
     
