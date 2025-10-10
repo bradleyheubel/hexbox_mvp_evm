@@ -1,20 +1,37 @@
 import { ethers } from "hardhat";
-import { ProductToken, USDCFundraiser, USDCFundraiserFactory } from "../typechain-types";
-import { IERC20 } from "../typechain-types/@openzeppelin/contracts/token/ERC20";
 
 async function main() {
-    // Contract addresses from deployment (replace with your deployed addresses)
-    const FUNDRAISER_ADDRESS = "0x75F8310bd7Ef4678c4271c3b68F52F782E36F668"//"0xADcC0a3179d5B8af40B37acd3bC85c35EB1809D8";
-    const PRODUCT_TOKEN_ADDRESS = "0xa7B70DA7aa425E3dFF61D07DC197125F1E819E1c"//"0x5467d9F00f83C1Ae540ACA7Aa0581eCc876F1EdA";
+    // Load deployment info
+    let deploymentInfo: any;
+    try {
+        deploymentInfo = require("../deployment-fuji-test.json");
+    } catch {
+        console.error("deployment-fuji-test.json not found. Run deployment script first.");
+        console.error("npx hardhat run scripts/deploy-fuji-test.ts --network fuji");
+        process.exit(1);
+    }
+
+    const FUNDRAISER_ADDRESS = process.env.TEST_FUNDRAISER_ADDRESS || "";
+    const PRODUCT_TOKEN_ADDRESS = deploymentInfo.addresses.productTokenProxy;
+    const FACTORY_ADDRESS = deploymentInfo.addresses.factoryProxy;
     const FUJI_USDC = "0x5425890298aed601595a70AB815c96711a31Bc65";
 
-    console.log("Testing contracts on Fuji...");
+    if (!FUNDRAISER_ADDRESS) {
+        console.error("Please set TEST_FUNDRAISER_ADDRESS environment variable");
+        console.error("Or create a fundraiser first using the factory");
+        process.exit(1);
+    }
+
+    console.log("Testing V09102025 contracts on Fuji...");
+    console.log("Factory:", FACTORY_ADDRESS);
+    console.log("ProductToken:", PRODUCT_TOKEN_ADDRESS);
+    console.log("Fundraiser:", FUNDRAISER_ADDRESS);
 
     // Get contract instances
-    const fundraiser = await ethers.getContractAt("USDCFundraiser", FUNDRAISER_ADDRESS) as USDCFundraiser;
-    //const factory = await ethers.getContractAt("USDCFundraiserFactory", FACTORY_ADDRESS) as USDCFundraiserFactory;
-    const productToken = await ethers.getContractAt("ProductToken", PRODUCT_TOKEN_ADDRESS) as ProductToken;
-    const usdc = await ethers.getContractAt("IERC20", FUJI_USDC) as IERC20;
+    const fundraiser = await ethers.getContractAt("USDCFundraiserUpgradeableV09102025", FUNDRAISER_ADDRESS);
+    const factory = await ethers.getContractAt("USDCFundraiserFactoryUpgradeableV09102025", FACTORY_ADDRESS);
+    const productToken = await ethers.getContractAt("ProductTokenUpgradeable", PRODUCT_TOKEN_ADDRESS);
+    const usdc = await ethers.getContractAt("IERC20", FUJI_USDC);
 
     // Get signer
     const [signer] = await ethers.getSigners();
