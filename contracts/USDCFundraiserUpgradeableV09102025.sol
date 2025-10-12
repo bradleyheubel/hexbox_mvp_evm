@@ -145,7 +145,7 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
 
         // Mint NFT via factory (instead of calling productToken directly)
         // Only proceed with fees and tracking if mint succeeds
-        try IFactory(factory).mintForFundraiser(productTokenAddress, msg.sender, productId, quantity) {
+        try IFactory(factory).mintForFundraiser(address(productToken), msg.sender, productId, quantity) {
             // Mint successful - now safe to update tracking and pay fees
             
             // Update counts and totals
@@ -173,24 +173,32 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
         require(!finalized, "Already finalized");
         
         if (fundingType == 0) {
-            require(block.timestamp > deadline, "Deadline not reached");
-            
+            // All or Nothing
             if (totalRaised >= minimumTarget) {
-                // Target met - proceed with finalization and fund release
+                // Target met - can finalize immediately, no need to wait for deadline
                 _executeFinalization(true);
-            } else if (totalRaised == 0) {
-                // No funds raised - safe to finalize (nothing to do)
-                _executeFinalization(false);
             } else {
-                // Funds raised but target not met - cannot finalize
-                revert("Target not met - refunds available instead");
+                // Target not met - must wait for deadline
+                require(block.timestamp > deadline, "Deadline not reached");
+
+                // target not met and deadline passed - can finalize
+                _executeFinalization(false);
+
             }
         } else if (fundingType == 1) {
+            // Limitless - only admin/owner can finalize anytime
             require(msg.sender == owner() || msg.sender == campaignAdmin, "Not authorized");
             _executeFinalization(true);
         } else if (fundingType == 2) {
-            require(block.timestamp > deadline || msg.sender == owner() || msg.sender == campaignAdmin, "Cannot finalize yet");
-            _executeFinalization(true);
+            // Flexible
+            if (totalRaised >= minimumTarget) {
+                // Target met - can finalize immediately, no need to wait for deadline
+                _executeFinalization(true);
+            } else {
+                // Target not met - must wait for deadline
+                require(block.timestamp > deadline, "Deadline not reached");
+                _executeFinalization(true);
+            }
         }
     }
 
@@ -229,6 +237,7 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
             // Before deadline: refunds allowed
             // After deadline: refunds not allowed
             require(block.timestamp < deadline, "Deadline passed - refunds not available");
+            require(totalRaised < minimumTarget, "Target met - refunds not available")
         } else {
             revert("Invalid funding type");
         }
@@ -237,7 +246,7 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
         uint256 balance = productToken.balanceOf(msg.sender, productId);
         require(balance >= quantity, "Insufficient NFT balance");
         
-        IFactory(factory).burnForFundraiser(productTokenAddress, msg.sender, productId, quantity);
+        IFactory(factory).burnForFundraiser(address(productToken), msg.sender, productId, quantity);
         
         uint256 fee = (product.price * feePercentage) / BASIS_POINTS;
         uint256 refundAmount = (product.price - fee) * quantity;
