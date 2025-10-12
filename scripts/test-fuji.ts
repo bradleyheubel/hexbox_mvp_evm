@@ -22,14 +22,14 @@ async function main() {
         process.exit(1);
     }
 
-    console.log("Testing V09102025 contracts on Fuji...");
+    console.log("Testing  contracts on Fuji...");
     console.log("Factory:", FACTORY_ADDRESS);
     console.log("ProductToken:", PRODUCT_TOKEN_ADDRESS);
     console.log("Fundraiser:", FUNDRAISER_ADDRESS);
 
     // Get contract instances
-    const fundraiser = await ethers.getContractAt("USDCFundraiserUpgradeableV09102025", FUNDRAISER_ADDRESS);
-    const factory = await ethers.getContractAt("USDCFundraiserFactoryUpgradeableV09102025", FACTORY_ADDRESS);
+    const fundraiser = await ethers.getContractAt("USDCFundraiserUpgradeable", FUNDRAISER_ADDRESS);
+    const factory = await ethers.getContractAt("USDCFundraiserFactoryUpgradeable", FACTORY_ADDRESS);
     const productToken = await ethers.getContractAt("ProductTokenUpgradeable", PRODUCT_TOKEN_ADDRESS);
     const usdc = await ethers.getContractAt("IERC20", FUJI_USDC);
 

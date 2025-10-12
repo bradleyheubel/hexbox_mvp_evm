@@ -79,13 +79,13 @@ async function main() {
     console.log("✅ ProductToken Implementation:", productTokenImplAddress);
 
     // ============================================================
-    // STEP 2: Deploy USDCFundraiserUpgradeableV09102025 Implementation
+    // STEP 2: Deploy USDCFundraiserUpgradeable Implementation
     // ============================================================
     console.log("\n" + "=".repeat(60));
-    console.log("📦 STEP 2: Deploying USDCFundraiserUpgradeableV09102025 Implementation");
+    console.log("📦 STEP 2: Deploying USDCFundraiserUpgradeable Implementation");
     console.log("=".repeat(60));
     
-    const USDCFundraiserUpgradeable = await ethers.getContractFactory("USDCFundraiserUpgradeableV09102025");
+    const USDCFundraiserUpgradeable = await ethers.getContractFactory("USDCFundraiserUpgradeable");
     
     console.log("   Deploying implementation...");
     const fundraiserImplementation = await USDCFundraiserUpgradeable.deploy();
@@ -97,14 +97,14 @@ async function main() {
     console.log("✅ Fundraiser Implementation:", fundraiserImplementationAddress);
 
     // ============================================================
-    // STEP 3: Deploy USDCFundraiserFactoryUpgradeableV09102025
+    // STEP 3: Deploy USDCFundraiserFactoryUpgradeable
     // ============================================================
     console.log("\n" + "=".repeat(60));
-    console.log("📦 STEP 3: Deploying USDCFundraiserFactoryUpgradeableV09102025");
+    console.log("📦 STEP 3: Deploying USDCFundraiserFactoryUpgradeable");
     console.log("=".repeat(60));
     
     const USDCFundraiserFactoryUpgradeable = await ethers.getContractFactory(
-      "USDCFundraiserFactoryUpgradeableV09102025"
+      "USDCFundraiserFactoryUpgradeable"
     );
     
     console.log("   Deploying factory proxy and implementation...");

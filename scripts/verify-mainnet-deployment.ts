@@ -27,7 +27,7 @@ async function main() {
 
   // Load contracts
   const factory = await ethers.getContractAt(
-    "USDCFundraiserFactoryUpgradeableV09102025",
+    "USDCFundraiserFactoryUpgradeable",
     deploymentInfo.addresses.factoryProxy
   );
 

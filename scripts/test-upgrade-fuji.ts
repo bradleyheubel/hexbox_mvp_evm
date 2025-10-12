@@ -56,7 +56,7 @@ async function main() {
   // ============================================================
   console.log("\n📦 Step 2: Deploying New Implementation");
   const NewFactoryImplementation = await ethers.getContractFactory(
-    "USDCFundraiserFactoryUpgradeableV09102025"
+    "USDCFundraiserFactoryUpgradeable"
   );
   
   console.log("   Validating upgrade compatibility...");

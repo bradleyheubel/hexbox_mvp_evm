@@ -8,7 +8,7 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
-import "./ProductToken.sol";
+import "./ProductTokenUpgradeable.sol";
 
 struct ProductConfig {
     uint256 productId;
@@ -16,12 +16,19 @@ struct ProductConfig {
     uint256 supplyLimit;  // 0 means unlimited supply
 }
 
-contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
+// Interface for factory minting/burning
+interface IFactory {
+    function mintForFundraiser(address productTokenAddress, address to, uint256 productId, uint256 amount) external;
+    function burnForFundraiser(address productTokenAddress, address from, uint256 productId, uint256 amount) external;
+}
+
+contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
     
     uint256 public constant BASIS_POINTS = 10000; // 100% = 10000 basis points
     IERC20 public usdc;
-    ProductToken public productToken;
+    ProductTokenUpgradeable public productToken;
+    address public factory;  // Factory address for minting/burning
     address public beneficiaryWallet;
     address public feeWallet;
     uint256 public minimumTarget;
@@ -56,19 +63,12 @@ contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, Pausabl
         uint96 amount;
     }
 
-    event Deposit(address indexed depositor, uint256 amount, uint256 fee);
+    event Deposit(address indexed depositor, uint256 netAmount, uint256 feeAmount);
+    event Finalized(bool success, uint256 totalRaised);
     event Refund(address indexed depositor, uint256 amount, uint256 productId, uint256 quantity);
-    event FundsReleased(address indexed beneficiary, uint256 amount);
-    event FeeUpdated(uint256 newFeePercentage);
-    event EmergencyWithdraw(address indexed to, uint256 amount);
-    event ProductPriceSet(uint256 productId, uint256 price);
-    event Debug(string message, uint256 value);
-    event DebugBytes(string message, bytes value);
-    event Finalized();
-    event ProductAdded(uint256 productId, uint256 price, uint256 supplyLimit);
-    event ProductRemoved(uint256 productId);
-    event ProductUpdated(uint256 productId, uint256 price, uint256 supplyLimit);
-    
+    event ProductAdded(uint256 indexed productId, uint256 price, uint256 supplyLimit);
+    event ProductUpdated(uint256 indexed productId, uint256 newPrice, uint256 newSupplyLimit);
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -83,6 +83,7 @@ contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, Pausabl
         uint256 _minimumTarget,
         uint256 _deadline,
         address _productTokenAddress,
+        address _factoryAddress,
         ProductConfig[] memory _products,
         address _campaignAdmin,
         address _owner
@@ -95,6 +96,7 @@ contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, Pausabl
         require(_beneficiaryWallet != address(0), "Invalid beneficiary wallet");
         require(_feeWallet != address(0), "Invalid fee wallet");
         require(_productTokenAddress != address(0), "Invalid product token address");
+        require(_factoryAddress != address(0), "Invalid factory address");
         require(_deadline > block.timestamp, "Invalid deadline");
         require(_products.length > 0, "No products provided");
         require(_campaignAdmin != address(0), "Invalid campaign admin");
@@ -107,27 +109,25 @@ contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, Pausabl
         feePercentage = _feePercentage;
         minimumTarget = _minimumTarget;
         deadline = _deadline;
-        productToken = ProductToken(_productTokenAddress);
+        productToken = ProductTokenUpgradeable(_productTokenAddress);
+        factory = _factoryAddress;
         campaignAdmin = _campaignAdmin;
-
-        // Initialize products
-        for (uint256 i = 0; i < _products.length; i++) {
-            ProductConfig memory product = _products[i];
-            require(product.price > 0, "Invalid product price");
-            require(product.productId > 0, "Invalid product ID");
-            
-            products[product.productId] = product;
-            productIds.push(product.productId);
-        }
-
-        require(_fundingType <= 2, "Invalid funding type");
         fundingType = _fundingType;
+
+        for (uint256 i = 0; i < _products.length; i++) {
+            require(_products[i].price > 0, "Invalid product price");
+            require(_products[i].productId > 0, "Invalid product ID");
+            products[_products[i].productId] = _products[i];
+            productIds.push(_products[i].productId);
+        }
     }
 
     function deposit(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
         ProductConfig memory product = products[productId];
         require(finalized == false, "Campaign is finalized");
-        require(block.timestamp < deadline, "Campaign has ended");
+        if (fundingType != 1) {
+            require(block.timestamp < deadline, "Campaign has ended");
+        }
         require(product.price > 0, "Invalid product");
         require(quantity > 0, "Invalid quantity");
         
@@ -143,48 +143,62 @@ contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, Pausabl
         // Transfer USDC from user to contract
         usdc.safeTransferFrom(msg.sender, address(this), totalAmount);
 
-        // Update counts and totals
-        productSoldCount[productId] += quantity;
-        totalRaised += netAmount; // Only count net amount toward target
-
-        // Try to mint NFT - if it fails, revert the entire transaction
-        try productToken.mint(msg.sender, productId, quantity) {
-            // Mint successful - continue
+        // Mint NFT via factory (instead of calling productToken directly)
+        // Only proceed with fees and tracking if mint succeeds
+        try IFactory(factory).mintForFundraiser(address(productToken), msg.sender, productId, quantity) {
+            // Mint successful - now safe to update tracking and pay fees
+            
+            // Update counts and totals
+            productSoldCount[productId] += quantity;
+            totalRaised += netAmount; // Only count net amount toward target
+            
+            // Pay fee wallet immediately after successful mint
+            if (feeAmount > 0) {
+                usdc.safeTransfer(feeWallet, feeAmount);
+            }
+            
+            emit Deposit(msg.sender, netAmount, feeAmount);
         } catch Error(string memory reason) {
-            // Revert the USDC transfer if mint fails
+            // Mint failed - refund full amount to user (no fees deducted)
             usdc.safeTransfer(msg.sender, totalAmount);
             revert(string.concat("NFT mint failed: ", reason));
         } catch (bytes memory /*lowLevelData*/) {
-            // Handle low-level errors
+            // Handle low-level errors - refund full amount
             usdc.safeTransfer(msg.sender, totalAmount);
             revert("NFT mint failed with low-level error");
         }
-
-        emit Deposit(msg.sender, netAmount, feeAmount);
     }
 
     function finalize() public nonReentrant whenNotPaused {
         require(!finalized, "Already finalized");
         
         if (fundingType == 0) {
-            require(block.timestamp > deadline, "Deadline not reached");
-            
+            // All or Nothing
             if (totalRaised >= minimumTarget) {
-                // Target met - proceed with finalization and fund release
+                // Target met - can finalize immediately, no need to wait for deadline
                 _executeFinalization(true);
-            } else if (totalRaised == 0) {
-                // No funds raised - safe to finalize (nothing to do)
-                _executeFinalization(false);
             } else {
-                // Funds raised but target not met - cannot finalize
-                revert("Target not met - refunds available instead");
+                // Target not met - must wait for deadline
+                require(block.timestamp > deadline, "Deadline not reached");
+
+                // target not met and deadline passed - can finalize
+                _executeFinalization(false);
+
             }
         } else if (fundingType == 1) {
+            // Limitless - only admin/owner can finalize anytime
             require(msg.sender == owner() || msg.sender == campaignAdmin, "Not authorized");
             _executeFinalization(true);
         } else if (fundingType == 2) {
-            require(block.timestamp > deadline || msg.sender == owner() || msg.sender == campaignAdmin, "Cannot finalize yet");
-            _executeFinalization(true);
+            // Flexible
+            if (totalRaised >= minimumTarget) {
+                // Target met - can finalize immediately, no need to wait for deadline
+                _executeFinalization(true);
+            } else {
+                // Target not met - must wait for deadline
+                require(block.timestamp > deadline, "Deadline not reached");
+                _executeFinalization(true);
+            }
         }
     }
 
@@ -192,68 +206,54 @@ contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, Pausabl
         finalized = true;
         
         if (releaseFunds) {
+            // Fees already paid on each deposit, so just transfer remaining balance to beneficiary
             uint256 contractBalance = usdc.balanceOf(address(this));
+            
             if (contractBalance > 0) {
                 usdc.safeTransfer(beneficiaryWallet, contractBalance);
-                emit FundsReleased(beneficiaryWallet, contractBalance);
             }
         }
         
-        emit Finalized();
-    }
-
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
-    function emergencyWithdraw(address to, uint256 amount) external onlyOwner {
-        require(to != address(0), "Invalid address");
-        require(amount <= usdc.balanceOf(address(this)), "Insufficient balance");
-        usdc.safeTransfer(to, amount);
-        emit EmergencyWithdraw(to, amount);
-    }
-
-    function updateFeePercentage(uint256 newFeePercentage) external onlyOwner {
-        require(newFeePercentage < BASIS_POINTS, "Fee percentage must be less than 100%");
-        feePercentage = newFeePercentage;
-        emit FeeUpdated(newFeePercentage);
-    }
-
-    function setProductPrice(uint256 productId, uint256 price) external onlyAdminOrOwner {
-        require(price > 0, "Invalid price");
-        require(products[productId].price > 0, "Product does not exist");
-        require(productSoldCount[productId] == 0, "Product has active sales");
-
-        products[productId].price = price;
-        emit ProductPriceSet(productId, price);
+        emit Finalized(releaseFunds, totalRaised);
     }
 
     function claimRefund(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
         ProductConfig memory product = products[productId];
         require(product.price > 0, "Invalid product");
         
+        // Funding Type 0: All or Nothing
         if (fundingType == 0) {
-            require(finalized == false, "Campaign is finalized");
-            require(block.timestamp > deadline && totalRaised < minimumTarget, "Refund not available");
+            // If target met (100% or more), no refunds allowed
+            require(totalRaised < minimumTarget, "Target met - refunds not available");
+        } 
+        // Funding Type 1: Limitless
+        else if (fundingType == 1) {
+            // If not finalized: refunds allowed
+            // If finalized: refunds not allowed
+            require(finalized == false, "Campaign finalized - refunds not available");
+        } 
+        // Funding Type 2: Flexible
+        else if (fundingType == 2) {
+            // Before deadline: refunds allowed
+            // After deadline: refunds not allowed
+            require(block.timestamp < deadline, "Deadline passed - refunds not available");
+            require(totalRaised < minimumTarget, "Target met - refunds not available")
         } else {
-            revert("Refunds not available for this funding type");
+            revert("Invalid funding type");
         }
 
-        // Burn the NFTs to get refund
+        // Burn the NFTs to get refund (via factory)
         uint256 balance = productToken.balanceOf(msg.sender, productId);
         require(balance >= quantity, "Insufficient NFT balance");
         
-        productToken.burn(msg.sender, productId, quantity);
+        IFactory(factory).burnForFundraiser(address(productToken), msg.sender, productId, quantity);
         
-        uint256 refundAmount = product.price * quantity;
+        uint256 fee = (product.price * feePercentage) / BASIS_POINTS;
+        uint256 refundAmount = (product.price - fee) * quantity;
         usdc.safeTransfer(msg.sender, refundAmount);
         
         productSoldCount[productId] -= quantity;
-        totalRaised -= (refundAmount * (BASIS_POINTS - feePercentage)) / BASIS_POINTS;
+        totalRaised -= refundAmount;
 
         emit Refund(msg.sender, refundAmount, productId, quantity);
     }
@@ -269,51 +269,33 @@ contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, Pausabl
         emit ProductAdded(product.productId, product.price, product.supplyLimit);
     }
 
-    function removeProduct(uint256 productId) external onlyAdminOrOwner {
+    function updateProduct(uint256 productId, uint256 newPrice, uint256 newSupplyLimit) external onlyAdminOrOwner {
         require(products[productId].price > 0, "Product does not exist");
-        require(productSoldCount[productId] == 0, "Product has active sales");
-
-        // Remove from productIds array
-        for (uint i = 0; i < productIds.length; i++) {
-            if (productIds[i] == productId) {
-                productIds[i] = productIds[productIds.length - 1];
-                productIds.pop();
-                break;
-            }
-        }
-
-        delete products[productId];
-        emit ProductRemoved(productId);
-    }
-
-    function updateProductSupply(uint256 productId, uint256 supplyLimit) external onlyAdminOrOwner {
-        require(products[productId].price > 0, "Product does not exist");
+        require(newPrice > 0, "Invalid price");
         
-        // If reducing supply limit, check if it's still above sold count
-        if (supplyLimit > 0) {
-            require(supplyLimit >= productSoldCount[productId], 
-                "New supply limit below sold count");
+        if (newSupplyLimit > 0) {
+            require(newSupplyLimit >= productSoldCount[productId], "Supply limit cannot be less than sold count");
         }
 
-        products[productId].supplyLimit = supplyLimit;
-        emit ProductUpdated(productId, products[productId].price, supplyLimit);
+        products[productId].price = newPrice;
+        products[productId].supplyLimit = newSupplyLimit;
+        
+        emit ProductUpdated(productId, newPrice, newSupplyLimit);
     }
 
-    function updateCampaignAdmin(address newAdmin) external onlyOwner {
-        require(newAdmin != address(0), "Invalid admin address");
-        campaignAdmin = newAdmin;
+    function pause() external onlyAdminOrOwner {
+        _pause();
     }
 
-    // View functions
+    function unpause() external onlyAdminOrOwner {
+        _unpause();
+    }
+
     function getProductIds() external view returns (uint256[] memory) {
         return productIds;
     }
 
     function getProduct(uint256 productId) external view returns (ProductConfig memory) {
         return products[productId];
-    }
-
-    function getContractBalance() external view returns (uint256) {
-        return usdc.balanceOf(address(this));
     }
 }

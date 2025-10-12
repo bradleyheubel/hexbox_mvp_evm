@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "./USDCFundraiserUpgradeable.sol";
+import "./USDCFundraiserUpgradeableV09102025.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 
-contract USDCFundraiserFactoryUpgradeable is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+// Interface for ProductToken minting/burning
+interface IProductToken {
+    function mint(address to, uint256 productId, uint256 amount) external;
+    function burn(address from, uint256 productId, uint256 amount) external;
+}
+
+contract USDCFundraiserFactoryUpgradeableV09102025 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     using Clones for address;
 
     uint256 public constant BASIS_POINTS = 10000; // 100% = 10000 basis points
@@ -26,6 +32,7 @@ contract USDCFundraiserFactoryUpgradeable is Initializable, OwnableUpgradeable, 
     
     event FundraiserCreated(address indexed fundraiser, address indexed creator);
     event ImplementationUpdated(address indexed newImplementation);
+    event ProductTokenUpdated(address indexed newProductToken);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -72,8 +79,8 @@ contract USDCFundraiserFactoryUpgradeable is Initializable, OwnableUpgradeable, 
         // Deploy minimal proxy clone of the implementation
         address fundraiserClone = fundraiserImplementation.clone();
         
-        // Initialize the clone
-        USDCFundraiserUpgradeable(fundraiserClone).initialize(
+        // Initialize the clone with factory address
+        USDCFundraiserUpgradeableV09102025(fundraiserClone).initialize(
             usdcAddress,
             beneficiaryWallet,
             feeWallet,
@@ -82,6 +89,7 @@ contract USDCFundraiserFactoryUpgradeable is Initializable, OwnableUpgradeable, 
             minimumTarget,
             deadline,
             productTokenAddress,
+            address(this),  // Pass factory address for minting/burning
             products,
             campaignAdmin,
             owner() // Factory owner becomes the fundraiser owner
@@ -93,6 +101,32 @@ contract USDCFundraiserFactoryUpgradeable is Initializable, OwnableUpgradeable, 
 
         emit FundraiserCreated(fundraiserClone, msg.sender);
         return fundraiserClone;
+    }
+
+    /**
+     * @dev Allows authorized fundraisers to mint tokens through the factory
+     * @param to Address to mint tokens to
+     * @param productId Product ID to mint
+     * @param amount Amount to mint
+     * @notice Only fundraisers created by this factory can call this function
+     * @notice Factory must have MINTER_ROLE on ProductToken
+     */
+    function mintForFundraiser(address givenProductTokenAddress, address to, uint256 productId, uint256 amount) external {
+        require(isFundraiser[msg.sender], "Only fundraisers can mint");
+        IProductToken(givenProductTokenAddress).mint(to, productId, amount);
+    }
+
+    /**
+     * @dev Allows authorized fundraisers to burn tokens through the factory
+     * @param from Address to burn tokens from
+     * @param productId Product ID to burn
+     * @param amount Amount to burn
+     * @notice Only fundraisers created by this factory can call this function
+     * @notice Factory must have MINTER_ROLE on ProductToken
+     */
+    function burnForFundraiser(address givenProductTokenAddress, address from, uint256 productId, uint256 amount) external {
+        require(isFundraiser[msg.sender], "Only fundraisers can burn");
+        IProductToken(givenProductTokenAddress).burn(from, productId, amount);
     }
 
     function changeDefaultFeePercentage(uint256 newFeePercentage) external onlyOwner {
@@ -109,6 +143,18 @@ contract USDCFundraiserFactoryUpgradeable is Initializable, OwnableUpgradeable, 
         require(newImplementation != address(0), "Invalid implementation");
         fundraiserImplementation = newImplementation;
         emit ImplementationUpdated(newImplementation);
+    }
+    
+    /**
+     * @dev Updates the product token address
+     * @param newProductToken The address of the new product token contract
+     * @notice Only the owner can update the product token address
+     * @notice This only affects new fundraiser deployments, not existing ones
+     */
+    function updateProductTokenAddress(address newProductToken) external onlyOwner {
+        require(newProductToken != address(0), "Invalid product token address");
+        productTokenAddress = newProductToken;
+        emit ProductTokenUpdated(newProductToken);
     }
 
     function getFeeWallet() external view returns (address) {
