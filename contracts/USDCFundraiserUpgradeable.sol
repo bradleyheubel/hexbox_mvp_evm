@@ -67,7 +67,7 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
     event Finalized(bool success, uint256 totalRaised);
     event Refund(address indexed depositor, uint256 amount, uint256 productId, uint256 quantity);
     event ProductAdded(uint256 indexed productId, uint256 price, uint256 supplyLimit);
-    event ProductUpdated(uint256 indexed productId, uint256 newPrice, uint256 newSupplyLimit);
+    event ProductUpdated(uint256 indexed productId, uint256 oldPrice, uint256 newPrice, uint256 oldSupplyLimit, uint256 newSupplyLimit);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -295,15 +295,23 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
     
         require(products[uniqueProductId].price > 0, "Product does not exist");
         require(newPrice > 0, "Invalid price");
-        
+
+        // Prevent price changes after any sales
+        if (newPrice != products[uniqueProductId].price) {
+            require(productSoldCount[uniqueProductId] == 0, "Cannot change price after sales");
+        }
+        // Prevent supply limit changes after any sales (unless new supply limit is set to 0 which means unlimited supply)
         if (newSupplyLimit > 0) {
             require(newSupplyLimit >= productSoldCount[uniqueProductId], "Supply limit cannot be less than sold count");
         }
 
+        uint256 oldPrice = products[uniqueProductId].price;
+        uint256 oldSupplyLimit = products[uniqueProductId].supplyLimit;
+
         products[uniqueProductId].price = newPrice;
         products[uniqueProductId].supplyLimit = newSupplyLimit;
         
-        emit ProductUpdated(uniqueProductId, newPrice, newSupplyLimit);
+        emit ProductUpdated(uniqueProductId, oldPrice, newPrice, oldSupplyLimit, newSupplyLimit);
     }
 
     /**
