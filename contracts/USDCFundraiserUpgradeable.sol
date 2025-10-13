@@ -258,29 +258,63 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
         emit Refund(msg.sender, refundAmount, productId, quantity);
     }
 
+    /**
+    * @dev Add a new product to the campaign
+    * @param product Product configuration with original product ID
+    * @notice The product ID will be converted to a unique ID internally
+    */
     function addProduct(ProductConfig memory product) external onlyAdminOrOwner {
         require(product.price > 0, "Invalid price");
         require(product.productId > 0, "Invalid product ID");
-        require(products[product.productId].price == 0, "Product already exists");
 
-        products[product.productId] = product;
-        productIds.push(product.productId);
+        // Generate unique product ID for this campaign
+        uint256 uniqueProductId = _generateUniqueProductId(product.productId);
         
-        emit ProductAdded(product.productId, product.price, product.supplyLimit);
+        require(products[uniqueProductId].price == 0, "Product already exists");
+
+        // Store with unique ID
+        products[uniqueProductId] = ProductConfig({
+            productId: uniqueProductId,
+            price: product.price,
+            supplyLimit: product.supplyLimit
+        });
+        productIds.push(uniqueProductId);
+        
+        emit ProductAdded(uniqueProductId, product.price, product.supplyLimit);
     }
 
+    /**
+    * @dev Update an existing product
+    * @param originalProductId The original product ID (will be converted to unique ID)
+    * @param newPrice New price for the product
+    * @param newSupplyLimit New supply limit (0 for unlimited)
+    */
     function updateProduct(uint256 productId, uint256 newPrice, uint256 newSupplyLimit) external onlyAdminOrOwner {
-        require(products[productId].price > 0, "Product does not exist");
+        // Generate unique product ID
+        uint256 uniqueProductId = _generateUniqueProductId(productId);
+    
+        require(products[uniqueProductId].price > 0, "Product does not exist");
         require(newPrice > 0, "Invalid price");
         
         if (newSupplyLimit > 0) {
-            require(newSupplyLimit >= productSoldCount[productId], "Supply limit cannot be less than sold count");
+            require(newSupplyLimit >= productSoldCount[uniqueProductId], "Supply limit cannot be less than sold count");
         }
 
-        products[productId].price = newPrice;
-        products[productId].supplyLimit = newSupplyLimit;
+        products[uniqueProductId].price = newPrice;
+        products[uniqueProductId].supplyLimit = newSupplyLimit;
         
-        emit ProductUpdated(productId, newPrice, newSupplyLimit);
+        emit ProductUpdated(uniqueProductId, newPrice, newSupplyLimit);
+    }
+
+    /**
+    * @dev Generates a unique product ID by hashing campaign address with original product ID
+    * @param originalProductId The original product ID provided by the user
+    * @return The unique product ID for this campaign
+    */
+    function _generateUniqueProductId(uint256 originalProductId) internal view returns (uint256) {
+        return uint256(keccak256(
+            abi.encodePacked(address(this), originalProductId)
+        ));
     }
 
     function pause() external onlyAdminOrOwner {
@@ -295,7 +329,22 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
         return productIds;
     }
 
+    /**
+    * @dev Get product by original product ID
+    * @param originalProductId The original product ID (not the unique hashed one)
+    * @return The product configuration
+    */
     function getProduct(uint256 productId) external view returns (ProductConfig memory) {
-        return products[productId];
+        uint256 uniqueProductId = _generateUniqueProductId(productId);
+        return products[uniqueProductId];
+    }
+
+    /**
+    * @dev Get unique product ID from original product ID
+    * @param originalProductId The original product ID
+    * @return The unique product ID for this campaign
+    */
+    function getUniqueProductId(uint256 originalProductId) external view returns (uint256) {
+        return _generateUniqueProductId(originalProductId);
     }
 }

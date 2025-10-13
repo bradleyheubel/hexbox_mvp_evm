@@ -33,6 +33,11 @@ contract USDCFundraiserFactoryUpgradeableV09102025 is Initializable, OwnableUpgr
     event FundraiserCreated(address indexed fundraiser, address indexed creator);
     event ImplementationUpdated(address indexed newImplementation);
     event ProductTokenUpdated(address indexed newProductToken);
+    event ProductIdMapped(
+        address indexed fundraiser, 
+        uint256 indexed originalProductId, 
+        uint256 indexed uniqueProductId
+    );
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -78,6 +83,25 @@ contract USDCFundraiserFactoryUpgradeableV09102025 is Initializable, OwnableUpgr
 
         // Deploy minimal proxy clone of the implementation
         address fundraiserClone = fundraiserImplementation.clone();
+
+        // Generate unique product IDs for this campaign
+        ProductConfig[] memory uniqueProducts = new ProductConfig[](products.length);
+        
+        for (uint256 i = 0; i < products.length; i++) {
+            // Create globally unique product ID by hashing campaign address + original product ID
+            uint256 uniqueProductId = uint256(keccak256(
+                abi.encodePacked(fundraiserClone, products[i].productId)
+            ));
+            
+            uniqueProducts[i] = ProductConfig({
+                productId: uniqueProductId,
+                price: products[i].price,
+                supplyLimit: products[i].supplyLimit
+            });
+            
+            // Emit event to help frontend map original ID to unique ID
+            emit ProductIdMapped(fundraiserClone, products[i].productId, uniqueProductId);
+        }
         
         // Initialize the clone with factory address
         USDCFundraiserUpgradeableV09102025(fundraiserClone).initialize(
@@ -90,7 +114,7 @@ contract USDCFundraiserFactoryUpgradeableV09102025 is Initializable, OwnableUpgr
             deadline,
             productTokenAddress,
             address(this),  // Pass factory address for minting/burning
-            products,
+            uniqueProducts,
             campaignAdmin,
             owner() // Factory owner becomes the fundraiser owner
         );
