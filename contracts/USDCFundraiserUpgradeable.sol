@@ -22,7 +22,7 @@ interface IFactory {
     function burnForFundraiser(address productTokenAddress, address from, uint256 productId, uint256 amount) external;
 }
 
-contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
+contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
     
     uint256 public constant BASIS_POINTS = 10000; // 100% = 10000 basis points
@@ -43,6 +43,7 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
 
     uint256 public fundingType; // 0 = all or nothing, 1 = limitless, 2 = flexible
     mapping(uint256 => ProductConfig) public products;
+    mapping(uint256 => uint256) public uniqueToOriginalProductId; // uniqueProductId => originalProductId
     address public campaignAdmin;
 
     modifier onlyAdminOrOwner() {
@@ -117,13 +118,35 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
         for (uint256 i = 0; i < _products.length; i++) {
             require(_products[i].price > 0, "Invalid product price");
             require(_products[i].productId > 0, "Invalid product ID");
-            products[_products[i].productId] = _products[i];
-            productIds.push(_products[i].productId);
+            
+            // Generate unique product ID for this campaign
+            uint256 uniqueProductId = uint256(keccak256(
+                abi.encodePacked(address(this), _products[i].productId)
+            ));
+            
+            // Store with unique ID
+            products[uniqueProductId] = ProductConfig({
+                productId: uniqueProductId,
+                price: _products[i].price,
+                supplyLimit: _products[i].supplyLimit
+            });
+            productIds.push(uniqueProductId);
+            
+            // Store reverse mapping
+            uniqueToOriginalProductId[uniqueProductId] = _products[i].productId;
         }
     }
 
+    /**
+    * @dev Deposit USDC for a specific product
+    * @param productId The original product ID (not the unique hashed one)
+    * @param quantity The quantity of the product to deposit
+    */
     function deposit(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
-        ProductConfig memory product = products[productId];
+        // Generate unique product ID for this campaign
+        uint256 uniqueProductId = _generateUniqueProductId(productId);
+        
+        ProductConfig memory product = products[uniqueProductId];
         require(finalized == false, "Campaign is finalized");
         if (fundingType != 1) {
             require(block.timestamp < deadline, "Campaign has ended");
@@ -133,7 +156,7 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
         
         // Check supply limit
         if (product.supplyLimit > 0) {
-            require(productSoldCount[productId] + quantity <= product.supplyLimit, "Exceeds supply limit");
+            require(productSoldCount[uniqueProductId] + quantity <= product.supplyLimit, "Exceeds supply limit");
         }
 
         uint256 totalAmount = product.price * quantity;
@@ -145,11 +168,11 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
 
         // Mint NFT via factory (instead of calling productToken directly)
         // Only proceed with fees and tracking if mint succeeds
-        try IFactory(factory).mintForFundraiser(address(productToken), msg.sender, productId, quantity) {
+        try IFactory(factory).mintForFundraiser(address(productToken), msg.sender, uniqueProductId, quantity) {
             // Mint successful - now safe to update tracking and pay fees
             
             // Update counts and totals
-            productSoldCount[productId] += quantity;
+            productSoldCount[uniqueProductId] += quantity;
             totalRaised += netAmount; // Only count net amount toward target
             
             // Pay fee wallet immediately after successful mint
@@ -169,6 +192,9 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
         }
     }
 
+    /**
+    * @dev Finalize the campaign
+    */
     function finalize() public nonReentrant whenNotPaused {
         require(!finalized, "Already finalized");
         
@@ -217,8 +243,16 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
         emit Finalized(releaseFunds, totalRaised);
     }
 
+    /**
+    * @dev Claim refund for a specific product
+    * @param productId The original product ID (not the unique hashed one)
+    * @param quantity The quantity of the product to refund
+    */
     function claimRefund(uint256 productId, uint256 quantity) external nonReentrant whenNotPaused {
-        ProductConfig memory product = products[productId];
+        // Generate unique product ID for this campaign
+        uint256 uniqueProductId = _generateUniqueProductId(productId);
+        
+        ProductConfig memory product = products[uniqueProductId];
         require(product.price > 0, "Invalid product");
         
         // Funding Type 0: All or Nothing
@@ -237,25 +271,25 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
             // Before deadline: refunds allowed
             // After deadline: refunds not allowed
             require(block.timestamp < deadline, "Deadline passed - refunds not available");
-            require(totalRaised < minimumTarget, "Target met - refunds not available")
+            require(totalRaised < minimumTarget, "Target met - refunds not available");
         } else {
             revert("Invalid funding type");
         }
 
         // Burn the NFTs to get refund (via factory)
-        uint256 balance = productToken.balanceOf(msg.sender, productId);
+        uint256 balance = productToken.balanceOf(msg.sender, uniqueProductId);
         require(balance >= quantity, "Insufficient NFT balance");
         
-        IFactory(factory).burnForFundraiser(address(productToken), msg.sender, productId, quantity);
+        IFactory(factory).burnForFundraiser(address(productToken), msg.sender, uniqueProductId, quantity);
         
         uint256 fee = (product.price * feePercentage) / BASIS_POINTS;
         uint256 refundAmount = (product.price - fee) * quantity;
         usdc.safeTransfer(msg.sender, refundAmount);
         
-        productSoldCount[productId] -= quantity;
+        productSoldCount[uniqueProductId] -= quantity;
         totalRaised -= refundAmount;
 
-        emit Refund(msg.sender, refundAmount, productId, quantity);
+        emit Refund(msg.sender, refundAmount, uniqueProductId, quantity);
     }
 
     /**
@@ -280,12 +314,15 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
         });
         productIds.push(uniqueProductId);
         
+        // Store reverse mapping
+        uniqueToOriginalProductId[uniqueProductId] = product.productId;
+        
         emit ProductAdded(uniqueProductId, product.price, product.supplyLimit);
     }
 
     /**
     * @dev Update an existing product
-    * @param originalProductId The original product ID (will be converted to unique ID)
+    * @param productId The original product ID (will be converted to unique ID)
     * @param newPrice New price for the product
     * @param newSupplyLimit New supply limit (0 for unlimited)
     */
@@ -325,11 +362,11 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
         ));
     }
 
-    function pause() external onlyAdminOrOwner {
+    function pause() external onlyOwner {
         _pause();
     }
 
-    function unpause() external onlyAdminOrOwner {
+    function unpause() external onlyOwner {
         _unpause();
     }
 
@@ -339,7 +376,7 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
 
     /**
     * @dev Get product by original product ID
-    * @param originalProductId The original product ID (not the unique hashed one)
+    * @param productId The original product ID (not the unique hashed one)
     * @return The product configuration
     */
     function getProduct(uint256 productId) external view returns (ProductConfig memory) {
@@ -349,10 +386,20 @@ contract USDCFundraiserUpgradeableV09102025 is Initializable, OwnableUpgradeable
 
     /**
     * @dev Get unique product ID from original product ID
-    * @param originalProductId The original product ID
+    * @param productId The original product ID
     * @return The unique product ID for this campaign
     */
-    function getUniqueProductId(uint256 originalProductId) external view returns (uint256) {
-        return _generateUniqueProductId(originalProductId);
+    function getUniqueProductId(uint256 productId) external view returns (uint256) {
+        return _generateUniqueProductId(productId);
+    }
+
+    /**
+    * @dev Get original product ID from unique product ID
+    * @param uniqueProductId The unique product ID
+    * @return The original product ID
+    */
+    function getOriginalProductId(uint256 uniqueProductId) external view returns (uint256) {
+        require(uniqueToOriginalProductId[uniqueProductId] > 0, "Product does not exist");
+        return uniqueToOriginalProductId[uniqueProductId];
     }
 }

@@ -8,9 +8,9 @@ async function main() {
     const fs = require('fs');
     let deploymentInfo;
     try {
-        deploymentInfo = JSON.parse(fs.readFileSync('deployment-info.json', 'utf8'));
+        deploymentInfo = JSON.parse(fs.readFileSync('deployment-fuji-test.json', 'utf8'));
     } catch (error) {
-        console.error("Could not load deployment-info.json. Make sure you have deployed the contracts first.");
+        console.error("Could not load deployment-fuji-test.json. Make sure you have deployed the contracts first.");
         process.exit(1);
     }
 
@@ -40,8 +40,8 @@ async function main() {
         newImplementation: await upgrades.erc1967.getImplementationAddress(await upgradedFactory.getAddress())
     });
 
-    fs.writeFileSync('deployment-info.json', JSON.stringify(deploymentInfo, null, 2));
-    console.log("\nUpgrade info saved to deployment-info.json");
+    fs.writeFileSync('deployment-fuji-test.json', JSON.stringify(deploymentInfo, null, 2));
+    console.log("\nUpgrade info saved to deployment-fuji-test.json");
 
     console.log("\n=== Verification Command ===");
     console.log("Verify new implementation:");

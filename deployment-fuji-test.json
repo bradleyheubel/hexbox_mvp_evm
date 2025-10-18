@@ -1,15 +1,15 @@
 {
   "network": "fuji",
   "chainId": 43113,
-  "timestamp": "2025-10-10T04:40:59.331Z",
+  "timestamp": "2025-10-18T08:16:09.422Z",
   "deployer": "0x669aA5fca5B9c19F0869e5Be17915fc9B87Ea41E",
   "safeAddress": "0xde7A51Bc88dD021B7da9edA3617529C4De6cc368",
   "addresses": {
-    "productTokenProxy": "0x9F166eE7e64744a22dE542e45B4BF02b92d7B9B9",
+    "productTokenProxy": "0x737EcA44cd41Fd9F628D3a62Eb740502f10c2259",
     "productTokenImplementation": "0x61f1887324B3C94eAa8A742cFDEF021Af1Cc9716",
-    "fundraiserImplementation": "0x55CF10FD9Ac4718a6Ef0FbD9210C7F885660B649",
-    "factoryProxy": "0xAE6164EF3b7e66b1e3F0Ac578144B5857871e652",
-    "factoryImplementation": "0xAb3364428Bd9cd1Dc82c2CA54470953f7EdfF408"
+    "fundraiserImplementation": "0x8D5B5178131849556A85b2D6e8CF5E9B8Be1Cf62",
+    "factoryProxy": "0x6bB9651e7b1585BDfDA46ABd5A552e500A2aF7B8",
+    "factoryImplementation": "0xFCDD92Cc2fb518f49Cd24C8547f66CbC4D8FA3Db"
   },
   "config": {
     "usdcAddress": "0x5425890298aed601595a70AB815c96711a31Bc65",
