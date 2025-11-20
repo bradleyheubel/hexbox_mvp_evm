@@ -14,7 +14,7 @@
     "productTokenAddress": "0x49216924D47184954e25940a6352abc4b03AbAeD",
     "defaultFeePercentage": 250,
     "feeWallet": "0xB60c975cC83168C298EfE5334A110DA33618B48d",
-    "baseUri": "https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/products_metadata/"
+    "baseUri": "https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/product_metadata/"
   },
   "upgrades": [
     {

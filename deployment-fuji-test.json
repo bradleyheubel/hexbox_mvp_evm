@@ -15,6 +15,15 @@
     "usdcAddress": "0x5425890298aed601595a70AB815c96711a31Bc65",
     "defaultFeePercentage": 250,
     "feeWallet": "0x254Dc55ECb273A96D1143D51F52961fa9de68E99",
-    "baseUri": "https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/products_metadata/"
-  }
+    "baseUri": "https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/product_metadata/"
+  },
+  "upgrades": [
+    {
+      "timestamp": "2025-11-07T08:30:04.389Z",
+      "type": "fundraiser-implementation-pending",
+      "oldImplementation": "0x8D5B5178131849556A85b2D6e8CF5E9B8Be1Cf62",
+      "newImplementation": "0x99d8FBEB2d8db0D15766A72791a97586197cef90",
+      "status": "PENDING - Waiting for Safe execution"
+    }
+  ]
 }

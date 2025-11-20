@@ -30,7 +30,7 @@ export const FUJI_CONFIG = {
     
     // Product Token Metadata (testing URI)
     productTokenBaseUri: process.env.PRODUCT_TOKEN_BASE_URI || 
-      "https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/products_metadata/",
+      "https://pub-7337cfa6ce8741dea70792ea29aa86e7.r2.dev/product_metadata/",
   },
 };
 

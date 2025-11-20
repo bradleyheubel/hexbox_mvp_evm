@@ -2,7 +2,7 @@ import { ethers } from "hardhat";
 
 async function main() {
     // Replace with the campaign address you want to check
-    const CAMPAIGN_ADDRESS = "0x2acf4f7216330459cb66e7dcb2d43762e8176d85"
+    const CAMPAIGN_ADDRESS = "0xafd5ab8a62610de57f4359121648c32a9b11bcdd"
     
     if (!CAMPAIGN_ADDRESS) {
         console.error("Usage: npx hardhat run scripts/check-campaign-finalized.ts --network fuji -- <CAMPAIGN_ADDRESS>");
@@ -43,6 +43,7 @@ async function main() {
         console.log(`- Deadline: ${new Date(Number(deadline) * 1000).toLocaleString()}`);
         console.log(`- Current Time: ${new Date(currentTime * 1000).toLocaleString()}`);
         console.log(`- Deadline Passed: ${currentTime > Number(deadline) ? '✅ YES' : '❌ NO'}`);
+        console.log(`- Campaign Admin: ${await fundraiser.campaignAdmin()}`);
         
         if (Number(fundingType) === 0) {
             console.log(`- Target Met: ${totalRaised >= minimumTarget ? '✅ YES' : '❌ NO'}`);
@@ -82,53 +83,53 @@ async function main() {
                 }
             }
             
-            // Attempt finalization if possible
-            if (canFinalize) {
-                console.log();
-                console.log("🚀 Attempting to finalize campaign...");
-                try {
-                    const [signer] = await ethers.getSigners();
-                    console.log(`Using account: ${signer.address}`);
+            // // Attempt finalization if possible
+            // if (canFinalize) {
+            //     console.log();
+            //     console.log("🚀 Attempting to finalize campaign...");
+            //     try {
+            //         const [signer] = await ethers.getSigners();
+            //         console.log(`Using account: ${signer.address}`);
                     
-                    // Estimate gas first
-                    const gasEstimate = await fundraiser.finalize.estimateGas();
-                    console.log(`Estimated gas: ${gasEstimate.toString()}`);
+            //         // Estimate gas first
+            //         const gasEstimate = await fundraiser.finalize.estimateGas();
+            //         console.log(`Estimated gas: ${gasEstimate.toString()}`);
                     
-                    // Attempt finalization
-                    const tx = await fundraiser.finalize({
-                        gasLimit: gasEstimate * 120n / 100n // Add 20% buffer
-                    });
+            //         // Attempt finalization
+            //         const tx = await fundraiser.finalize({
+            //             gasLimit: gasEstimate * 120n / 100n // Add 20% buffer
+            //         });
                     
-                    console.log(`✅ Finalization transaction sent: ${tx.hash}`);
-                    console.log("⏳ Waiting for confirmation...");
+            //         console.log(`✅ Finalization transaction sent: ${tx.hash}`);
+            //         console.log("⏳ Waiting for confirmation...");
                     
-                    const receipt = await tx.wait();
+            //         const receipt = await tx.wait();
                     
-                    if (receipt?.status === 1) {
-                        console.log("🎉 Campaign successfully finalized!");
-                        console.log(`Gas used: ${receipt.gasUsed.toString()}`);
+            //         if (receipt?.status === 1) {
+            //             console.log("🎉 Campaign successfully finalized!");
+            //             console.log(`Gas used: ${receipt.gasUsed.toString()}`);
                         
-                        // Check if funds were released
-                        const finalBalance = await usdc.balanceOf(CAMPAIGN_ADDRESS);
-                        console.log(`Remaining contract balance: ${ethers.formatUnits(finalBalance, 6)} USDC`);
+            //             // Check if funds were released
+            //             const finalBalance = await usdc.balanceOf(CAMPAIGN_ADDRESS);
+            //             console.log(`Remaining contract balance: ${ethers.formatUnits(finalBalance, 6)} USDC`);
                         
-                    } else {
-                        console.log("❌ Finalization transaction failed");
-                    }
+            //         } else {
+            //             console.log("❌ Finalization transaction failed");
+            //         }
                     
-                } catch (error: any) {
-                    console.log("❌ Finalization failed:");
-                    if (error.message.includes("Already finalized")) {
-                        console.log("   Campaign is already finalized");
-                    } else if (error.message.includes("Only owner")) {
-                        console.log("   Only the contract owner can finalize this campaign");
-                    } else if (error.message.includes("Deadline not reached")) {
-                        console.log("   Deadline has not been reached yet");
-                    } else {
-                        console.log(`   Error: ${error.message}`);
-                    }
-                }
-            }
+            //     } catch (error: any) {
+            //         console.log("❌ Finalization failed:");
+            //         if (error.message.includes("Already finalized")) {
+            //             console.log("   Campaign is already finalized");
+            //         } else if (error.message.includes("Only owner")) {
+            //             console.log("   Only the contract owner can finalize this campaign");
+            //         } else if (error.message.includes("Deadline not reached")) {
+            //             console.log("   Deadline has not been reached yet");
+            //         } else {
+            //             console.log(`   Error: ${error.message}`);
+            //         }
+            //     }
+            // }
         } else {
             console.log("✅ Campaign is already finalized");
         }

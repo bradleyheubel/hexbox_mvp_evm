@@ -200,14 +200,15 @@ contract USDCFundraiserUpgradeable is Initializable, OwnableUpgradeable, Pausabl
         
         if (fundingType == 0) {
             // All or Nothing
+            
+            // Must wait for deadline
+            require(block.timestamp > deadline, "Deadline not reached");
+
             if (totalRaised >= minimumTarget) {
-                // Target met - can finalize immediately, no need to wait for deadline
+                // Target met - can finalize with funds transfer
                 _executeFinalization(true);
             } else {
-                // Target not met - must wait for deadline
-                require(block.timestamp > deadline, "Deadline not reached");
-
-                // target not met and deadline passed - can finalize
+                // target not met - can finalize without funds transfer
                 _executeFinalization(false);
 
             }
